@@ -1,41 +1,90 @@
 import os
-
 import parsl
+
 from parsl.app.app import bash_app
 
+
 @bash_app
-def bamtofastq(
+def sort_bam_by_queryname(
         executables,
-        filename,
-        label=None,
+        tmpdir,
+        bam_filepath,
         outputs=[],
+        label=None,
         stderr=parsl.AUTO_LOGNAME,
         stdout=parsl.AUTO_LOGNAME):
     cmd = """
-    printenv
-
-    mkdir -p {output_dir}
-    cd {output_dir}
-
-    {bamtofastq} collate=1 exclude=QCFAIL,SECONDARY,SUPPLEMENTARY filename={filename} gz=1 inputformat=bam level=5 outputdir={output_dir} outputperreadgroup=1 outputperreadgroupsuffixF=_1.fq.gz outputperreadgroupsuffixF2=_2.fq.gz outputperreadgroupsuffixO=_o1.fq.gz outputperreadgroupsuffixO2=_o2.fq.gz outputperreadgroupsuffixS=_s.fq.gz tryoq=1 > /dev/null 
+    
+    {java} \
+        -Xmx2g \
+        -Djava.io.tmpdir={tmpdir} \
+        -jar {picard} \
+        SortSam \
+        CREATE_INDEX=true \
+        INPUT={filename} \
+        OUTPUT={sorted_output} \
+        SORT_ORDER=queryname \
+        VALIDATION_STRINGENCY=STRICT \
+        TMP_DIR={tmpdir}
 
     """.format(
-        output_dir=outputs[0],
-        bamtofastq=executables['bamtofastq'],
-        filename=filename
+        java=executables['java'],
+        tmpdir=tmpdir,
+        picard=executables['picard.jar'],
+        filename=bam_filepath,
+        sorted_output=outputs[0],
     )
 
     return cmd
 
+
+@bash_app
+def bamtofastq(
+        executables,
+        sorted_bam_filepath,
+        outputs=[],
+        label=None,
+        stderr=parsl.AUTO_LOGNAME,
+        stdout=parsl.AUTO_LOGNAME):
+    cmd = """
+
+    mkdir -p {output_dir}
+    cd {output_dir}
+    
+    {bamtofastq} \
+        collate=1 \
+        exclude=QCFAIL,SECONDARY,SUPPLEMENTARY \
+        filename={filename} \
+        gz=1 \
+        inputformat=bam \
+        level=5 \
+        outputdir={output_dir} \
+        outputperreadgroup=1 \
+        outputperreadgroupsuffixF=_1.fq.gz \
+        outputperreadgroupsuffixF2=_2.fq.gz \
+        outputperreadgroupsuffixO=_o1.fq.gz \
+        outputperreadgroupsuffixO2=_o2.fq.gz \
+        outputperreadgroupsuffixS=_s.fq.gz \
+        tryoq=1 > /dev/null
+
+    """.format(
+        bamtofastq=executables['bamtofastq'],
+        filename=sorted_bam_filepath,
+        output_dir=outputs[0]
+    )
+
+    return cmd
+
+
 @bash_app
 def align_and_sort(
         executables,
+        reference,
         fastq_dir,
         rg_id,
         rg_line,
-        reference,
-        label=None,
         outputs=[],
+        label=None,
         stderr=parsl.AUTO_LOGNAME,
         stdout=parsl.AUTO_LOGNAME):
     cmd = """
@@ -64,12 +113,13 @@ def align_and_sort(
 
     return cmd
 
+
 @bash_app
 def merge_and_mark_duplicates(
-        executables, 
-        label=None,
-        inputs=[], 
+        executables,
+        inputs=[],
         outputs=[],
+        label=None,
         stderr=parsl.AUTO_LOGNAME,
         stdout=parsl.AUTO_LOGNAME):
     merge_cmd = """
@@ -77,13 +127,14 @@ def merge_and_mark_duplicates(
     {java} -jar {picard} MergeSamFiles ASSUME_SORTED=false CREATE_INDEX=true {inputs} MERGE_SEQUENCE_DICTIONARIES=false OUTPUT={merged} SORT_ORDER=coordinate USE_THREADING=true VALIDATION_STRINGENCY=STRICT
 
     """.format(
-        java=executables['java'], 
-        picard=executables['picard.jar'], 
+        java=executables['java'],
+        picard=executables['picard.jar'],
         merged=outputs[0].replace('.bam', '.dupes.bam'),
         inputs=' '.join(['I={}'.format(x.filepath) for x in inputs])
     )
-    if len(inputs) == 1: # cannot merge a single file
-        merge_cmd = 'cp {merged} {output}'.format(merged=outputs[0].replace('.bam', '.dupes.bam'), output=outputs[0])
+    if len(inputs) == 1:  # cannot merge a single file
+        merge_cmd = 'cp {merged} {output}'.format(
+            merged=outputs[0].replace('.bam', '.dupes.bam'), output=outputs[0])
 
     cmd = """
     {merge_cmd}
@@ -103,9 +154,10 @@ def merge_and_mark_duplicates(
 
     return cmd
 
+
 @bash_app
 def somaticsniper(
-        executables, 
+        executables,
         reference,
         normal_bam,
         tumor_bam,
@@ -127,9 +179,10 @@ def somaticsniper(
 
     return cmd
 
+
 @bash_app
 def muse(
-        executables, 
+        executables,
         reference,
         normal_bam,
         tumor_bam,
@@ -155,9 +208,10 @@ def muse(
 
     return cmd
 
+
 @bash_app
 def varscan(
-        executables, 
+        executables,
         reference,
         normal_bam,
         tumor_bam,
@@ -184,6 +238,7 @@ def varscan(
     )
 
     return cmd
+
 
 @bash_app
 def mutect2(

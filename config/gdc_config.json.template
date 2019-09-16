@@ -1,0 +1,14 @@
+{
+    "log_level": "debug",
+    "gdc_reference_seq_fa": "/data/GRCh38.d1.vd1.fa",
+    "dbsnp_known_snp_sites": "/data/common_all_20180418.vcf.gz",
+    "gdc_executables_dir": "/opt/anaconda3/envs/gdc/bin",
+    "gdc_output_dir": "/output",
+    "gdc_bam_files.json": "",
+    "gdc_executables.json": "",
+    "gdc_run_dir": "",
+    "gdc_somaticsniper_enabled": true,
+    "gdc_muse_enabled": true,
+    "gdc_varscan_enabled": true,
+    "gdc_strelka2_enabled": true
+}

@@ -1,0 +1,21 @@
+# Visual Studio Code project files
+.vscode
+
+# Python temp objects
+*.pyc
+*.pyo
+
+# Python virtual environment
+env/
+
+# Python dependencies zip archives
+*.zip
+
+# output dir
+output/
+
+# Parsl config file - contains user specific Parsl config data
+config/parsl_config.py
+
+# GDC config file - contains user specific GDC pipeline config data
+config/gdc_config.json

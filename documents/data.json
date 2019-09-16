@@ -1,0 +1,6 @@
+{
+    "0246823f-99f4-4a46-b2b1-27f81179584c": {
+        "normal": "/home/project/11001079/TCGA_germline/data/STAD/a12f12d9-c493-486f-a23d-95c724d6390c/C440.TCGA-CG-4438-10A-01D-1158-08.8_gdc_realn.bam",
+        "tumor": "/home/project/11001079/TCGA_germline/data/STAD_Tumor/a3e15107-2503-4370-9ce0-0fe1e947e659/C440.TCGA-CG-4438-01A-01D-1158-08.8_gdc_realn.bam"
+    }
+}
