@@ -141,7 +141,7 @@ class GDCPatientDNASeq:
             f"sort_and_align: patient: {self.patient} | aligned_bams: {str(aligned_bams)}")
         return aligned_bams
 
-    def run_somatic_variant_callers(self, merged_bams):
+    def run_variant_callers(self, merged_bams):
         if GDCPatientDNASeq.gdc_params.get('gdc_somaticsniper_enabled', False):
             LOGGER.info(f"Running somaticsniper: patient: {self.patient}")
             apps.somaticsniper(
@@ -165,7 +165,7 @@ class GDCPatientDNASeq:
                 label='{}-muse'.format(self.patient)
             )
 
-        if GDCPatientDNASeq.gdc_params.get('gdc_muse_enabled', False):
+        if GDCPatientDNASeq.gdc_params.get('gdc_varscan_enabled', False):
             LOGGER.info(f"Running varscan: patient: {self.patient}")
             apps.varscan(
                 GDCPatientDNASeq.gdc_executables,
@@ -174,4 +174,42 @@ class GDCPatientDNASeq:
                 merged_bams['tumor'],
                 self.patient_workdir,
                 label='{}-varscan'.format(self.patient)
+            )
+
+        if GDCPatientDNASeq.gdc_params.get('gdc_strelka2_somatic_enabled', False):
+            somatic_analysis_path = os.path.join(self.patient_workdir, 'strelka2-analysis-somatic')
+            if not os.path.exists(somatic_analysis_path):
+                os.makedirs(somatic_analysis_path)
+            indels_output = os.path.join(somatic_analysis_path, 'results', 'variants', 'somatic.indels.vcf.gz')
+            snvs_output = os.path.join(somatic_analysis_path, 'results', 'variants', 'somatic.snvs.vcf.gz')
+            somatic_output = [indels_output, snvs_output]
+
+            LOGGER.info(
+                f"Running strelka2 somatic analysis: patient: {self.patient}, analysis_output: {somatic_analysis_path}")
+            apps.strelka2_somatic(
+                GDCPatientDNASeq.gdc_executables,
+                GDCPatientDNASeq.gdc_reference,
+                merged_bams['normal'],
+                merged_bams['tumor'],
+                somatic_analysis_path,
+                somatic_output,
+                label='{}-strelka2-somatic'.format(self.patient)
+            )
+
+        if GDCPatientDNASeq.gdc_params.get('gdc_strelka2_germline_enabled', False):
+            germline_analysis_path = os.path.join(self.patient_workdir, 'strelka2-analysis-germline')
+            if not os.path.exists(germline_analysis_path):
+                os.makedirs(germline_analysis_path)
+            variant_output = os.path.join(germline_analysis_path, 'results', 'variants', 'variants.vcf.gz')
+            germline_output = [variant_output]
+
+            LOGGER.info(
+                f"Running strelka2 germline analysis: patient: {self.patient}, analysis_output: {germline_analysis_path}")
+            apps.strelka2_germline(
+                GDCPatientDNASeq.gdc_executables,
+                GDCPatientDNASeq.gdc_reference,
+                merged_bams['normal'],
+                germline_analysis_path,
+                germline_output,
+                label='{}-strelka2-germline'.format(self.patient)
             )

@@ -4,7 +4,7 @@ import parsl
 from parsl.app.app import bash_app
 
 
-@bash_app
+@bash_app(cache=True)
 def sort_bam_by_queryname(
         executables,
         tmpdir,
@@ -38,7 +38,7 @@ def sort_bam_by_queryname(
     return cmd
 
 
-@bash_app
+@bash_app(cache=True)
 def bamtofastq(
         executables,
         sorted_bam_filepath,
@@ -76,7 +76,7 @@ def bamtofastq(
     return cmd
 
 
-@bash_app
+@bash_app(cache=True)
 def align_and_sort(
         executables,
         reference,
@@ -114,7 +114,7 @@ def align_and_sort(
     return cmd
 
 
-@bash_app
+@bash_app(cache=True)
 def merge_and_mark_duplicates(
         executables,
         inputs=[],
@@ -265,6 +265,60 @@ def mutect2(
         reference=reference,
         tumor=tumor_bam,
         normal=normal_bam
+    )
+
+    return cmd
+
+
+@bash_app
+def strelka2_somatic(
+        executables,
+        reference,
+        normal_bam,
+        tumor_bam,
+        analysis_output,
+        output,
+        label=None,
+        stderr=parsl.AUTO_LOGNAME,
+        stdout=parsl.AUTO_LOGNAME):
+    cmd = """
+
+    {strelka2_somatic_configure} --referenceFasta {reference} --tumorBam {tumor} --normalBam {normal} --runDir {analysis_output} && \
+    {strelka2_analysis_run} -m local -j 8
+
+    """.format(
+        strelka2_somatic_configure=executables['strelka2_somatic_configure'],
+        analysis_output=analysis_output,
+        strelka2_analysis_run='{}/runWorkflow.py'.format(analysis_output),
+        reference=reference,
+        tumor=tumor_bam,
+        normal=normal_bam
+    )
+
+    return cmd
+
+
+@bash_app
+def strelka2_germline(
+        executables,
+        reference,
+        tumor_bam,
+        analysis_output,
+        output,
+        label=None,
+        stderr=parsl.AUTO_LOGNAME,
+        stdout=parsl.AUTO_LOGNAME):
+    cmd = """
+
+    {strelka2_germline_configure} --referenceFasta {reference} --bam {tumor} --runDir {analysis_output} && \
+    {strelka2_analysis_run} -m local -j 8
+
+    """.format(
+        strelka2_germline_configure=executables['strelka2_germline_configure'],
+        analysis_output=analysis_output,
+        strelka2_analysis_run='{}/runWorkflow.py'.format(analysis_output),
+        reference=reference,
+        tumor=tumor_bam
     )
 
     return cmd

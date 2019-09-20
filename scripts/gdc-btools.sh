@@ -97,3 +97,7 @@ tar xvf GRCh38.d1.vd1_BWA.tar.gz
 samtools faidx GRCh38.d1.vd1.fa
 
 java -jar picard.jar CreateSequenceDictionary R= GRCh38.d1.vd1.fa  O= GRCh38.d1.vd1.dict
+
+
+wget https://github.com/Illumina/strelka/archive/v2.9.10.tar.gz -O strelka-2.9.10.tar.gz
+tar -zxf ./strelka-2.9.10.tar.gz

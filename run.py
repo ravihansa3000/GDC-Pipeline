@@ -3,6 +3,7 @@ import os
 import logging
 import sys
 import parsl
+from parsl.utils import get_all_checkpoints
 
 from gdc_workflow import GDCPatientDNASeq
 import gdc_workflow
@@ -27,6 +28,10 @@ def setup_gdc_pipeline(params):
     if not os.path.exists(gdc_tmp_dir):
         os.makedirs(gdc_tmp_dir)
 
+    # Parsl checkpoint is created each time an app completes or fails
+    config.checkpoint_files = get_all_checkpoints()
+    config.checkpoint_mode = 'task_exit'
+
 
 def run_gdc_pipeline(params):
     gdc_bam_files = params['gdc_bam_files']
@@ -45,7 +50,7 @@ def run_gdc_pipeline(params):
     for patient, bams in gdc_bam_files.items():
         gdc_patient = GDCPatientDNASeq(patient, bams)
         merged_bams = gdc_patient.process_patient_seq_data()
-        gdc_patient.run_somatic_variant_callers(merged_bams)
+        gdc_patient.run_variant_callers(merged_bams)
 
     LOGGER.info("Waiting for GDC Pipeline tasks to complete...")
     parsl.wait_for_current_tasks()
@@ -63,24 +68,24 @@ def validate_config(params):
     for patient, bams in gdc_bam_files.items():
         for tissue in ['tumor', 'normal']:
             bam_file = bams[tissue]
-            if not (os.path.exists(bam_file)):
+            if not os.path.exists(bam_file):
                 LOGGER.error(
                     f"BAM file: {bam_file} not found for patient: {patient}")
                 missing_executables.append(bam_file)
 
     gdc_executables = params['gdc_executables']
     for key, val in gdc_executables.items():
-        if not (os.path.exists(val)):
+        if not os.path.exists(val):
             LOGGER.error(f"Executable: {val} not found for key: {key}")
             missing_executables.append(val)
 
-    if (len(missing_executables) > 0):
+    if missing_executables:
         LOGGER.error(f"Missing dependencies: {str(missing_executables)}")
         raise Exception("GDC Pipeline validation falied")
 
 
 def load_defaults(params, key, val):
-    if (key not in params or params[key] == None or params[key] == ''):
+    if (key not in params or params[key] is None or params[key] == ''):
         params[key] = val
 
 
@@ -114,6 +119,17 @@ def load_configs():
     for key, val in gdc_executables.items():
         gdc_executables[key] = os.path.join(
             gdc_config['gdc_executables_dir'], val)
+
+    if gdc_config.get('gdc_strelka2_somatic_enabled', False):
+        strelka2_install_path = gdc_config.get('STRELKA_INSTALL_PATH', gdc_config['gdc_executables_dir'])
+        gdc_executables['strelka2_somatic_configure'] = os.path.join(
+            strelka2_install_path, 'bin', 'configureStrelkaSomaticWorkflow.py')
+
+    if gdc_config.get('gdc_strelka2_germline_enabled', False):
+        strelka2_install_path = gdc_config.get('STRELKA_INSTALL_PATH', gdc_config['gdc_executables_dir'])
+        gdc_executables['strelka2_germline_configure'] = os.path.join(
+            strelka2_install_path, 'bin', 'configureStrelkaGermlineWorkflow.py')
+
     gdc_config['gdc_executables'] = gdc_executables
 
     return gdc_config
@@ -125,8 +141,7 @@ def setup_logger(params, logger_obj):
         '%(asctime)s %(name)s [%(levelname)s]  %(message)s')
     logger_obj.setLevel(log_level)
 
-    fh = logging.FileHandler(os.path.join(
-        params['gdc_output_dir'], 'GDC_Pipeline.log'))
+    fh = logging.FileHandler(os.path.join(params['gdc_output_dir'], 'GDC_Pipeline.log'))
     fh.setLevel(log_level)
     fh.setFormatter(formatter)
     logger_obj.addHandler(fh)
@@ -138,15 +153,11 @@ def setup_logger(params, logger_obj):
 
 
 def main(argv):
-    try:
-        gdc_config = load_configs()
-        setup_logger(gdc_config, LOGGER)
-        validate_config(gdc_config)
-        setup_gdc_pipeline(gdc_config)
-        run_gdc_pipeline(gdc_config)
-
-    except Exception as e:
-        LOGGER.error(e, exc_info=True)
+    gdc_config = load_configs()
+    setup_logger(gdc_config, LOGGER)
+    validate_config(gdc_config)
+    setup_gdc_pipeline(gdc_config)
+    run_gdc_pipeline(gdc_config)
 
 
 if __name__ == "__main__":
