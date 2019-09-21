@@ -42,8 +42,7 @@ def run_gdc_pipeline(params):
     GDCPatientDNASeq.gdc_output_dir = params['gdc_output_dir']
     GDCPatientDNASeq.gdc_tmp_dir = params['gdc_tmp_dir']
     GDCPatientDNASeq.gdc_executables = params['gdc_executables']
-    GDCPatientDNASeq.gdc_reference = params['gdc_reference_seq_fa']
-    GDCPatientDNASeq.gdc_known_sites = params['dbsnp_known_snp_sites']
+    GDCPatientDNASeq.gdc_data_files = params['gdc_data_files']
     GDCPatientDNASeq.gdc_params = params
     gdc_workflow.LOGGER = LOGGER
 
@@ -58,30 +57,38 @@ def run_gdc_pipeline(params):
 
 
 def validate_config(params):
-    missing_executables = []
-    if ('gdc_reference_seq_fa' not in params or params['gdc_reference_seq_fa'] == '' or
-            not os.path.exists(params['gdc_reference_seq_fa'])):
-        LOGGER.error("GDC config error! gdc_reference_seq_fa not found")
-        missing_executables.append(params['gdc_reference_seq_fa'])
-
+    missing_bam_files = []
     gdc_bam_files = params['gdc_bam_files']
     for patient, bams in gdc_bam_files.items():
         for tissue in ['tumor', 'normal']:
             bam_file = bams[tissue]
             if not os.path.exists(bam_file):
-                LOGGER.error(
-                    f"BAM file: {bam_file} not found for patient: {patient}")
-                missing_executables.append(bam_file)
+                LOGGER.error(f"BAM file: {bam_file} not found for patient: {patient}")
+                missing_bam_files.append(bam_file)
+    if missing_bam_files:
+        LOGGER.error(f"Missing BAM files: {str(missing_bam_files)}")
+        raise RuntimeError("GDC Pipeline validation failed.")
 
+    missing_executables = []
     gdc_executables = params['gdc_executables']
     for key, val in gdc_executables.items():
         if not os.path.exists(val):
             LOGGER.error(f"Executable: {val} not found for key: {key}")
             missing_executables.append(val)
-
     if missing_executables:
         LOGGER.error(f"Missing dependencies: {str(missing_executables)}")
-        raise Exception("GDC Pipeline validation falied")
+        raise RuntimeError("GDC Pipeline validation failed.")
+
+    missing_data_files = []
+
+    gdc_data_files = params['gdc_data_files']
+    for key, val in gdc_data_files.items():
+        if not os.path.exists(val):
+            LOGGER.error(f"Data File: {val} not found for key: {key}")
+            missing_data_files.append(val)
+    if missing_data_files:
+        LOGGER.error(f"Missing data files: {str(missing_executables)}")
+        raise RuntimeError("GDC Pipeline validation failed.")
 
 
 def load_defaults(params, key, val):
@@ -117,20 +124,23 @@ def load_configs():
         gdc_executables = json.load(f)
 
     for key, val in gdc_executables.items():
-        gdc_executables[key] = os.path.join(
-            gdc_config['gdc_executables_dir'], val)
+        gdc_executables[key] = os.path.join(gdc_config['gdc_executables_dir'], val)
 
-    if gdc_config.get('gdc_strelka2_somatic_enabled', False):
+    if gdc_config.get('gdc_strelka2_somatic_enabled', False) or gdc_config.get('gdc_strelka2_germline_enabled', False):
         strelka2_install_path = gdc_config.get('STRELKA_INSTALL_PATH', gdc_config['gdc_executables_dir'])
         gdc_executables['strelka2_somatic_configure'] = os.path.join(
             strelka2_install_path, 'bin', 'configureStrelkaSomaticWorkflow.py')
-
-    if gdc_config.get('gdc_strelka2_germline_enabled', False):
-        strelka2_install_path = gdc_config.get('STRELKA_INSTALL_PATH', gdc_config['gdc_executables_dir'])
         gdc_executables['strelka2_germline_configure'] = os.path.join(
             strelka2_install_path, 'bin', 'configureStrelkaGermlineWorkflow.py')
 
     gdc_config['gdc_executables'] = gdc_executables
+
+    gdc_data_files = {
+        'gdc_reference_seq_fa': gdc_config['gdc_reference_seq_fa'],
+        'dbsnp_known_snp_sites': gdc_config['dbsnp_known_snp_sites'],
+        'dbsnp_known_snp_sites_index': "{}.tbi".format(gdc_config['dbsnp_known_snp_sites'])
+    }
+    gdc_config['gdc_data_files'] = gdc_data_files
 
     return gdc_config
 

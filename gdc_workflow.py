@@ -29,8 +29,7 @@ class GDCPatientDNASeq:
     gdc_output_dir = None
     gdc_tmp_dir = None
     gdc_executables = {}
-    gdc_reference = None
-    gdc_known_sites = None
+    gdc_data_files = {}
     gdc_params = {}
 
     def __init__(self, patient, bams):
@@ -126,7 +125,7 @@ class GDCPatientDNASeq:
 
             align_and_sort_output = apps.align_and_sort(
                 GDCPatientDNASeq.gdc_executables,
-                GDCPatientDNASeq.gdc_reference,
+                GDCPatientDNASeq.gdc_data_files['gdc_reference_seq_fa'],
                 bamtofastq_output,
                 rg_id,
                 rg_line.replace('\t', '\\t'),
@@ -146,7 +145,7 @@ class GDCPatientDNASeq:
             LOGGER.info(f"Running somaticsniper: patient: {self.patient}")
             apps.somaticsniper(
                 GDCPatientDNASeq.gdc_executables,
-                GDCPatientDNASeq.gdc_reference,
+                GDCPatientDNASeq.gdc_data_files['gdc_reference_seq_fa'],
                 merged_bams['normal'],
                 merged_bams['tumor'],
                 self.patient_workdir,
@@ -157,10 +156,10 @@ class GDCPatientDNASeq:
             LOGGER.info(f"Running muse: patient: {self.patient}")
             apps.muse(
                 GDCPatientDNASeq.gdc_executables,
-                GDCPatientDNASeq.gdc_reference,
+                GDCPatientDNASeq.gdc_data_files['gdc_reference_seq_fa'],
                 merged_bams['normal'],
                 merged_bams['tumor'],
-                GDCPatientDNASeq.gdc_known_sites,
+                GDCPatientDNASeq.gdc_data_files['dbsnp_known_snp_sites'],
                 self.patient_workdir,
                 label='{}-muse'.format(self.patient)
             )
@@ -169,7 +168,7 @@ class GDCPatientDNASeq:
             LOGGER.info(f"Running varscan: patient: {self.patient}")
             apps.varscan(
                 GDCPatientDNASeq.gdc_executables,
-                GDCPatientDNASeq.gdc_reference,
+                GDCPatientDNASeq.gdc_data_files['gdc_reference_seq_fa'],
                 merged_bams['normal'],
                 merged_bams['tumor'],
                 self.patient_workdir,
@@ -188,7 +187,7 @@ class GDCPatientDNASeq:
                 f"Running strelka2 somatic analysis: patient: {self.patient}, analysis_output: {somatic_analysis_path}")
             apps.strelka2_somatic(
                 GDCPatientDNASeq.gdc_executables,
-                GDCPatientDNASeq.gdc_reference,
+                GDCPatientDNASeq.gdc_data_files['gdc_reference_seq_fa'],
                 merged_bams['normal'],
                 merged_bams['tumor'],
                 somatic_analysis_path,
@@ -207,7 +206,7 @@ class GDCPatientDNASeq:
                 f"Running strelka2 germline analysis: patient: {self.patient}, analysis_output: {germline_analysis_path}")
             apps.strelka2_germline(
                 GDCPatientDNASeq.gdc_executables,
-                GDCPatientDNASeq.gdc_reference,
+                GDCPatientDNASeq.gdc_data_files['gdc_reference_seq_fa'],
                 merged_bams['normal'],
                 germline_analysis_path,
                 germline_output,
