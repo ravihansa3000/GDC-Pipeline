@@ -14,7 +14,9 @@ def sort_bam_by_queryname(
         stderr=parsl.AUTO_LOGNAME,
         stdout=parsl.AUTO_LOGNAME):
     cmd = """
-    
+
+    mkdir -p {tmpdir} && \
+
     {java} \
         -Xmx2g \
         -Djava.io.tmpdir={tmpdir} \
@@ -48,8 +50,9 @@ def bamtofastq(
         stdout=parsl.AUTO_LOGNAME):
     cmd = """
 
-    mkdir -p {output_dir}
-    cd {output_dir}
+    mkdir -p {output_dir} && \
+
+    cd {output_dir} && \
     
     {bamtofastq} \
         collate=1 \
@@ -79,6 +82,7 @@ def bamtofastq(
 @bash_app(cache=True)
 def align_and_sort(
         executables,
+        tmpdir,
         reference,
         fastq_dir,
         rg_id,
@@ -96,7 +100,19 @@ def align_and_sort(
         echo FIXME
     fi
 
-    {java} -jar {picard} SortSam CREATE_INDEX=true INPUT={aligned_output} OUTPUT={sorted_aligned_output} SORT_ORDER=coordinate VALIDATION_STRINGENCY=STRICT
+    mkdir -p {tmpdir} && \
+
+    {java} \
+        -Xmx2g \
+        -Djava.io.tmpdir={tmpdir} \
+        -jar {picard} \
+        SortSam \
+        CREATE_INDEX=true \
+        INPUT={aligned_output} \
+        OUTPUT={sorted_aligned_output} \
+        SORT_ORDER=coordinate \
+        VALIDATION_STRINGENCY=STRICT \
+        TMP_DIR={tmpdir}
 
     """.format(
         fastq_dir=fastq_dir,
@@ -108,7 +124,8 @@ def align_and_sort(
         aligned_output=outputs[0].replace('.sorted', ''),
         sorted_aligned_output=outputs[0],
         picard=executables['picard.jar'],
-        java=executables['java']
+        java=executables['java'],
+        tmpdir=tmpdir
     )
 
     return cmd
@@ -117,6 +134,7 @@ def align_and_sort(
 @bash_app(cache=True)
 def merge_and_mark_duplicates(
         executables,
+        tmpdir,
         inputs=[],
         outputs=[],
         label=None,
@@ -124,10 +142,26 @@ def merge_and_mark_duplicates(
         stdout=parsl.AUTO_LOGNAME):
     merge_cmd = """
 
-    {java} -jar {picard} MergeSamFiles ASSUME_SORTED=false CREATE_INDEX=true {inputs} MERGE_SEQUENCE_DICTIONARIES=false OUTPUT={merged} SORT_ORDER=coordinate USE_THREADING=true VALIDATION_STRINGENCY=STRICT
+    mkdir -p {tmpdir} && \
+
+    {java} \
+        -Xmx2g \
+        -Djava.io.tmpdir={tmpdir} \
+        -jar {picard} \
+        MergeSamFiles \
+        ASSUME_SORTED=false \
+        CREATE_INDEX=true \
+        {inputs} \
+        MERGE_SEQUENCE_DICTIONARIES=false \
+        OUTPUT={merged} \
+        SORT_ORDER=coordinate \
+        USE_THREADING=true \
+        VALIDATION_STRINGENCY=STRICT \
+        TMP_DIR={tmpdir}
 
     """.format(
         java=executables['java'],
+        tmpdir=tmpdir,
         picard=executables['picard.jar'],
         merged=outputs[0].replace('.bam', '.dupes.bam'),
         inputs=' '.join(['I={}'.format(x.filepath) for x in inputs])
@@ -137,14 +171,27 @@ def merge_and_mark_duplicates(
             merged=outputs[0].replace('.bam', '.dupes.bam'), output=outputs[0])
 
     cmd = """
-    {merge_cmd}
 
-    {samtools} view -o {cleaned}  -f 0x2 {merged}
+    {merge_cmd} && \
 
-    {java} -jar {picard} MarkDuplicates CREATE_INDEX=true I={cleaned} OUTPUT={output} M=S5S1TumorDup.txt VALIDATION_STRINGENCY=STRICT 
+    {samtools} view -o {cleaned}  -f 0x2 {merged} && \
+
+    {java} \
+        -Xmx2g \
+        -Djava.io.tmpdir={tmpdir} \
+        -jar {picard} \
+        MarkDuplicates \
+        CREATE_INDEX=true \
+        I={cleaned} \
+        OUTPUT={output} \
+        M=S5S1TumorDup.txt \
+        VALIDATION_STRINGENCY=STRICT \
+        TMP_DIR={tmpdir}
+
     """.format(
         merge_cmd=merge_cmd,
         java=executables['java'],
+        tmpdir=tmpdir,
         picard=executables['picard.jar'],
         samtools=executables['samtools'],
         merged=outputs[0].replace('.bam', '.dupes.bam'),
@@ -192,8 +239,9 @@ def muse(
         stderr=parsl.AUTO_LOGNAME,
         stdout=parsl.AUTO_LOGNAME):
     cmd = """
-      
-    {muse} call -f {reference} {tumor} {normal} -O {call_output}
+
+    {muse} call -f {reference} {tumor} {normal} -O {call_output} && \
+
     {muse} sump -I {call_output}.MuSE.txt -E -D {known_sites} -O {sump_output}
 
     """.format(
@@ -212,6 +260,7 @@ def muse(
 @bash_app
 def varscan(
         executables,
+        tmpdir,
         reference,
         normal_bam,
         tumor_bam,
@@ -221,15 +270,44 @@ def varscan(
         stdout=parsl.AUTO_LOGNAME):
     cmd = """
 
-    {samtools} mpileup -f {reference} -q 1 -B {normal} {tumor} > {output}/intermediate_mpileup.pileup
+    {samtools} mpileup -f {reference} -q 1 -B {normal} {tumor} > {output}/intermediate_mpileup.pileup && \
 
-    {java} -jar {varscan} somatic {output}/intermediate_mpileup.pileup {output}/varscan.vcf --mpileup 1 --min-coverage 8 --min-coverage-normal 8 --min-coverage-tumor 6 --min-var-freq 0.10 --min-freq-for-hom 0.75 --normal-purity 1.0 --tumor-purity 1.00 --p-value 0.99 --somatic-p-value 0.05 --strand-filter 0 --output-vcf {output}/varscan.vcf
+    mkdir -p {tmpdir} && \
 
-    {java} -jar {varscan} processSomatic {output}/varscan.vcf.snp --min-tumor-freq 0.10 --max-normal-freq 0.05 --p-value 0.07
+    {java} \
+        -Xmx2g \
+        -Djava.io.tmpdir={tmpdir} \
+        -jar {varscan} \
+        somatic \
+        {output}/intermediate_mpileup.pileup \
+        {output}/varscan.vcf \
+        --mpileup 1 \
+        --min-coverage 8 \
+        --min-coverage-normal 8 \
+        --min-coverage-tumor 6 \
+        --min-var-freq 0.10 \
+        --min-freq-for-hom 0.75 \
+        --normal-purity 1.0 \
+        --tumor-purity 1.00 \
+        --p-value 0.99 \
+        --somatic-p-value 0.05 \
+        --strand-filter 0 \
+        --output-vcf {output}/varscan.vcf && \
+
+    {java} \
+        -Xmx2g \
+        -Djava.io.tmpdir={tmpdir} \
+        -jar {varscan} \
+        processSomatic \
+        {output}/varscan.vcf.snp \
+        --min-tumor-freq 0.10 \
+        --max-normal-freq 0.05 \
+        --p-value 0.07
 
     """.format(
         samtools=executables['samtools'],
         java=executables['java'],
+        tmpdir=tmpdir,
         varscan=executables['varscan.jar'],
         output=output,
         reference=reference,
@@ -243,6 +321,7 @@ def varscan(
 @bash_app
 def mutect2(
         executables,
+        tmpdir,
         reference,
         normal_bam,
         tumor_bam,
@@ -254,10 +333,24 @@ def mutect2(
         stdout=parsl.AUTO_LOGNAME):
     cmd = """
 
-    {java} -jar {genomejar} -T MuTect2 -R {reference} -I:tumor {tumor} -I:normal {normal} --normal_panel {normal_panel} --dbsnp {dbsnp} --contamination_fraction_to_filter 0.02 -o {output} --output_mode EMIT_VARIANTS_ONLY --disable_auto_index_creation_and_locking_when_reading_rods
+    {java} \
+        -Xmx2g \
+        -Djava.io.tmpdir={tmpdir} \
+        -jar {genomejar} \
+        -T MuTect2 \
+        -R {reference} \
+        -I:tumor {tumor} \
+        -I:normal {normal} \
+        --normal_panel {normal_panel} \
+        --dbsnp {dbsnp} \
+        --contamination_fraction_to_filter 0.02 \
+        -o {output} \
+        --output_mode EMIT_VARIANTS_ONLY \
+        --disable_auto_index_creation_and_locking_when_reading_rods
 
     """.format(
         java=executables['java'],
+        tmpdir=tmpdir,
         genomejar=executables['GenomeAnalysisTK.jar'],
         normal_panel=normal_panel,
         dbsnp=dbsnp,
@@ -284,6 +377,7 @@ def strelka2_somatic(
     cmd = """
 
     {strelka2_somatic_configure} --referenceFasta {reference} --tumorBam {tumor} --normalBam {normal} --runDir {analysis_output} && \
+
     {strelka2_analysis_run} -m local -j 8
 
     """.format(
@@ -302,7 +396,7 @@ def strelka2_somatic(
 def strelka2_germline(
         executables,
         reference,
-        tumor_bam,
+        bam_filepath,
         analysis_output,
         output,
         label=None,
@@ -310,7 +404,8 @@ def strelka2_germline(
         stdout=parsl.AUTO_LOGNAME):
     cmd = """
 
-    {strelka2_germline_configure} --referenceFasta {reference} --bam {tumor} --runDir {analysis_output} && \
+    {strelka2_germline_configure} --referenceFasta {reference} --bam {bam} --runDir {analysis_output} && \
+
     {strelka2_analysis_run} -m local -j 8
 
     """.format(
@@ -318,7 +413,7 @@ def strelka2_germline(
         analysis_output=analysis_output,
         strelka2_analysis_run='{}/runWorkflow.py'.format(analysis_output),
         reference=reference,
-        tumor=tumor_bam
+        bam=bam_filepath
     )
 
     return cmd

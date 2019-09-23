@@ -16,7 +16,6 @@ LOGGER = logging.getLogger(__name__)
 def setup_gdc_pipeline(params):
     gdc_output_dir = params['gdc_output_dir']
     gdc_run_dir = params['gdc_run_dir']
-    gdc_tmp_dir = params['gdc_tmp_dir']
 
     if not os.path.exists(gdc_output_dir):
         os.makedirs(gdc_output_dir)
@@ -24,9 +23,6 @@ def setup_gdc_pipeline(params):
     if not os.path.exists(gdc_run_dir):
         os.makedirs(gdc_run_dir)
     config.run_dir = gdc_run_dir
-
-    if not os.path.exists(gdc_tmp_dir):
-        os.makedirs(gdc_tmp_dir)
 
     # Parsl checkpoint is created each time an app completes or fails
     config.checkpoint_files = get_all_checkpoints()
@@ -40,7 +36,6 @@ def run_gdc_pipeline(params):
     LOGGER.info("GDC Pipeline started!")
 
     GDCPatientDNASeq.gdc_output_dir = params['gdc_output_dir']
-    GDCPatientDNASeq.gdc_tmp_dir = params['gdc_tmp_dir']
     GDCPatientDNASeq.gdc_executables = params['gdc_executables']
     GDCPatientDNASeq.gdc_data_files = params['gdc_data_files']
     GDCPatientDNASeq.gdc_params = params
@@ -114,8 +109,6 @@ def load_configs():
                   os.path.join(dir_path, 'documents', 'data.json'))
     load_defaults(gdc_config, 'gdc_executables.json',
                   os.path.join(dir_path, 'documents', 'executables.json'))
-    load_defaults(gdc_config, 'gdc_tmp_dir',
-                  os.path.join(gdc_output_dir, 'tmp'))
 
     with open(gdc_config['gdc_bam_files.json']) as f:
         gdc_config['gdc_bam_files'] = json.load(f)
