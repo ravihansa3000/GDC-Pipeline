@@ -1,4 +1,3 @@
-import os
 import parsl
 
 from parsl.app.app import bash_app
@@ -14,7 +13,6 @@ def sort_bam_by_queryname(
         stderr=parsl.AUTO_LOGNAME,
         stdout=parsl.AUTO_LOGNAME):
     cmd = """
-
     mkdir -p {tmpdir} && \
 
     {java} \
@@ -28,7 +26,6 @@ def sort_bam_by_queryname(
         SORT_ORDER=queryname \
         VALIDATION_STRINGENCY=STRICT \
         TMP_DIR={tmpdir}
-
     """.format(
         java=executables['java'],
         tmpdir=tmpdir,
@@ -49,7 +46,6 @@ def bamtofastq(
         stderr=parsl.AUTO_LOGNAME,
         stdout=parsl.AUTO_LOGNAME):
     cmd = """
-
     mkdir -p {output_dir} && \
 
     cd {output_dir} && \
@@ -69,7 +65,6 @@ def bamtofastq(
         outputperreadgroupsuffixO2=_o2.fq.gz \
         outputperreadgroupsuffixS=_s.fq.gz \
         tryoq=1 > /dev/null
-
     """.format(
         bamtofastq=executables['bamtofastq'],
         filename=sorted_bam_filepath,
@@ -113,7 +108,6 @@ def align_and_sort(
         SORT_ORDER=coordinate \
         VALIDATION_STRINGENCY=STRICT \
         TMP_DIR={tmpdir}
-
     """.format(
         fastq_dir=fastq_dir,
         samtools=executables['samtools'],
@@ -140,39 +134,38 @@ def merge_and_mark_duplicates(
         label=None,
         stderr=parsl.AUTO_LOGNAME,
         stdout=parsl.AUTO_LOGNAME):
-    merge_cmd = """
-
-    mkdir -p {tmpdir} && \
-
-    {java} \
-        -Xmx2g \
-        -Djava.io.tmpdir={tmpdir} \
-        -jar {picard} \
-        MergeSamFiles \
-        ASSUME_SORTED=false \
-        CREATE_INDEX=true \
-        {inputs} \
-        MERGE_SEQUENCE_DICTIONARIES=false \
-        OUTPUT={merged} \
-        SORT_ORDER=coordinate \
-        USE_THREADING=true \
-        VALIDATION_STRINGENCY=STRICT \
-        TMP_DIR={tmpdir}
-
-    """.format(
-        java=executables['java'],
-        tmpdir=tmpdir,
-        picard=executables['picard.jar'],
-        merged=outputs[0].replace('.bam', '.dupes.bam'),
-        inputs=' '.join(['I={}'.format(x.filepath) for x in inputs])
-    )
     if len(inputs) == 1:  # cannot merge a single file
-        merge_cmd = 'cp {merged} {output}'.format(
-            merged=outputs[0].replace('.bam', '.dupes.bam'), output=outputs[0])
+        merge_cmd = """
+        cp {merged} {output} && \
+        """.format(merged=outputs[0].replace('.bam', '.dupes.bam'), output=outputs[0])
+    else:
+        merge_cmd = """
+        mkdir -p {tmpdir} && \
+
+        {java} \
+            -Xmx2g \
+            -Djava.io.tmpdir={tmpdir} \
+            -jar {picard} \
+            MergeSamFiles \
+            ASSUME_SORTED=false \
+            CREATE_INDEX=true \
+            {inputs} \
+            MERGE_SEQUENCE_DICTIONARIES=false \
+            OUTPUT={merged} \
+            SORT_ORDER=coordinate \
+            USE_THREADING=true \
+            VALIDATION_STRINGENCY=STRICT \
+            TMP_DIR={tmpdir} && \
+        """.format(
+            java=executables['java'],
+            tmpdir=tmpdir,
+            picard=executables['picard.jar'],
+            merged=outputs[0].replace('.bam', '.dupes.bam'),
+            inputs=' '.join(['I={}'.format(x.filepath) for x in inputs])
+        )
 
     cmd = """
-
-    {merge_cmd} && \
+    {merge_cmd}
 
     {samtools} view -o {cleaned}  -f 0x2 {merged} && \
 
@@ -187,7 +180,6 @@ def merge_and_mark_duplicates(
         M=S5S1TumorDup.txt \
         VALIDATION_STRINGENCY=STRICT \
         TMP_DIR={tmpdir}
-
     """.format(
         merge_cmd=merge_cmd,
         java=executables['java'],
@@ -213,9 +205,7 @@ def somaticsniper(
         stderr=parsl.AUTO_LOGNAME,
         stdout=parsl.AUTO_LOGNAME):
     cmd = """
-
     {somaticsniper} -q 1 -L -G -Q 15 -s 0.01 -T 0.85 -N 2 -r 0.001 -n NORMAL -t TUMOR -F vcf -f {reference} {tumor} {normal} {output}
-
     """.format(
         somaticsniper=executables['bam-somaticsniper'],
         reference=reference,
@@ -239,11 +229,9 @@ def muse(
         stderr=parsl.AUTO_LOGNAME,
         stdout=parsl.AUTO_LOGNAME):
     cmd = """
-
     {muse} call -f {reference} {tumor} {normal} -O {call_output} && \
 
     {muse} sump -I {call_output}.MuSE.txt -E -D {known_sites} -O {sump_output}
-
     """.format(
         muse=executables['MuSE'],
         reference=reference,
@@ -269,7 +257,6 @@ def varscan(
         stderr=parsl.AUTO_LOGNAME,
         stdout=parsl.AUTO_LOGNAME):
     cmd = """
-
     {samtools} mpileup -f {reference} -q 1 -B {normal} {tumor} > {output}/intermediate_mpileup.pileup && \
 
     mkdir -p {tmpdir} && \
@@ -303,7 +290,6 @@ def varscan(
         --min-tumor-freq 0.10 \
         --max-normal-freq 0.05 \
         --p-value 0.07
-
     """.format(
         samtools=executables['samtools'],
         java=executables['java'],
@@ -332,7 +318,6 @@ def mutect2(
         stderr=parsl.AUTO_LOGNAME,
         stdout=parsl.AUTO_LOGNAME):
     cmd = """
-
     {java} \
         -Xmx2g \
         -Djava.io.tmpdir={tmpdir} \
@@ -347,7 +332,6 @@ def mutect2(
         -o {output} \
         --output_mode EMIT_VARIANTS_ONLY \
         --disable_auto_index_creation_and_locking_when_reading_rods
-
     """.format(
         java=executables['java'],
         tmpdir=tmpdir,
@@ -375,11 +359,9 @@ def strelka2_somatic(
         stderr=parsl.AUTO_LOGNAME,
         stdout=parsl.AUTO_LOGNAME):
     cmd = """
-
     {strelka2_somatic_configure} --referenceFasta {reference} --tumorBam {tumor} --normalBam {normal} --runDir {analysis_output} && \
 
     {strelka2_analysis_run} -m local -j 8
-
     """.format(
         strelka2_somatic_configure=executables['strelka2_somatic_configure'],
         analysis_output=analysis_output,
@@ -403,11 +385,9 @@ def strelka2_germline(
         stderr=parsl.AUTO_LOGNAME,
         stdout=parsl.AUTO_LOGNAME):
     cmd = """
-
     {strelka2_germline_configure} --referenceFasta {reference} --bam {bam} --runDir {analysis_output} && \
 
     {strelka2_analysis_run} -m local -j 8
-
     """.format(
         strelka2_germline_configure=executables['strelka2_germline_configure'],
         analysis_output=analysis_output,
