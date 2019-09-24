@@ -359,7 +359,13 @@ def strelka2_somatic(
         stderr=parsl.AUTO_LOGNAME,
         stdout=parsl.AUTO_LOGNAME):
     cmd = """
-    {strelka2_somatic_configure} --referenceFasta {reference} --tumorBam {tumor} --normalBam {normal} --runDir {analysis_output} && \
+    {strelka2_somatic_configure} \
+        --referenceFasta {reference} \
+        --callMemMb 2048 \
+        --exome \
+        --tumorBam {tumor} \
+        --normalBam {normal} \
+        --runDir {analysis_output} && \
 
     {strelka2_analysis_run} -m local -j 8
     """.format(
@@ -385,7 +391,12 @@ def strelka2_germline(
         stderr=parsl.AUTO_LOGNAME,
         stdout=parsl.AUTO_LOGNAME):
     cmd = """
-    {strelka2_germline_configure} --referenceFasta {reference} --bam {bam} --runDir {analysis_output} && \
+    {strelka2_germline_configure} \
+        --referenceFasta {reference} \
+        --callMemMb 2048 \
+        --exome \
+        --bam {bam} \
+        --runDir {analysis_output} && \
 
     {strelka2_analysis_run} -m local -j 8
     """.format(
