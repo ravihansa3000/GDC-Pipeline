@@ -136,12 +136,10 @@ def merge_and_mark_duplicates(
         stdout=parsl.AUTO_LOGNAME):
     if len(inputs) == 1:  # cannot merge a single file
         merge_cmd = """
-        cp {merged} {output} && \
-        """.format(merged=outputs[0].replace('.bam', '.dupes.bam'), output=outputs[0])
+        mv {input_bam} {merged_bam} && \
+        """.format(input_bam=inputs[0], merged_bam=outputs[0].replace('.bam', '.dupes.bam'))
     else:
         merge_cmd = """
-        mkdir -p {tmpdir} && \
-
         {java} \
             -Xmx2g \
             -Djava.io.tmpdir={tmpdir} \
@@ -165,6 +163,8 @@ def merge_and_mark_duplicates(
         )
 
     cmd = """
+    mkdir -p {tmpdir} && \
+
     {merge_cmd}
 
     {samtools} view -o {cleaned}  -f 0x2 {merged} && \
@@ -189,6 +189,71 @@ def merge_and_mark_duplicates(
         merged=outputs[0].replace('.bam', '.dupes.bam'),
         cleaned=outputs[0].replace('.bam', '.cleaned.dupes.bam'),
         output=outputs[0]
+    )
+
+    return cmd
+
+
+@bash_app
+def co_cleaning_pipeline(
+        executables,
+        reference,
+        known_sites,
+        known_indels,
+        input_bam,
+        output_dir,
+        outputs=[],
+        label=None,
+        stderr=parsl.AUTO_LOGNAME,
+        stdout=parsl.AUTO_LOGNAME):
+    cmd = """
+    mkdir -p {output_dir} && \
+
+    {java} \
+        -jar {gatk3_jar} \
+        -T RealignerTargetCreator \
+        -R {reference} \
+        -known {known_indels} \
+        -I {input_bam} \
+        -o {realigner_target_output} && \
+
+    {java} \
+        -jar {gatk3_jar} \
+        -T IndelRealigner \
+        -R {reference} \
+        -known {known_indels} \
+        -targetIntervals {realigner_target_output} \
+        --noOriginalAlignmentTags \
+        -I {input_bam} \
+        -o {indel_realigner_output} && \
+
+    {java} \
+        -jar {gatk3_jar} \
+        -T BaseRecalibrator \
+        -R {reference} \
+        -I {indel_realigner_output} \
+        -knownSites {known_sites} \
+        -o {recal_output} && \
+
+    {java} \
+        -jar {gatk3_jar} \
+        -T PrintReads \
+        -R {reference} \
+        -I {indel_realigner_output} \
+        --BQSR {recal_output} \
+        -o {cleaned_bam_output}
+    """.format(
+        output_dir=output_dir,
+        java=executables['java'],
+        gatk3_jar=executables['GATK3-3.5_GenomeAnalysisTK.jar'],
+        reference=reference,
+        known_sites=known_sites,
+        known_indels=known_indels,
+        input_bam=input_bam,
+        realigner_target_output="{}/realign_target.intervals".format(output_dir),
+        indel_realigner_output="{}/indel_realigned.bam".format(output_dir),
+        recal_output="{}/recal_data.table".format(output_dir),
+        cleaned_bam_output=outputs[0]
     )
 
     return cmd
@@ -321,7 +386,7 @@ def mutect2(
     {java} \
         -Xmx2g \
         -Djava.io.tmpdir={tmpdir} \
-        -jar {genomejar} \
+        -jar {gatk4_jar} \
         -T MuTect2 \
         -R {reference} \
         -I:tumor {tumor} \
@@ -335,7 +400,7 @@ def mutect2(
     """.format(
         java=executables['java'],
         tmpdir=tmpdir,
-        genomejar=executables['GenomeAnalysisTK.jar'],
+        gatk4_jar=executables['GATK4-4.0.4.0_GenomeAnalysisTK.jar'],
         normal_panel=normal_panel,
         dbsnp=dbsnp,
         output='{}/{}.vcf'.format(output, label),

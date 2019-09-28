@@ -1,15 +1,17 @@
 {
     "log_level": "debug",
-    "gdc_reference_seq_fa": "/data/GRCh38.d1.vd1.fa",
-    "dbsnp_known_snp_sites": "/data/common_all_20180418.vcf.gz",
-    "gdc_executables_dir": "/opt/anaconda3/envs/gdc/bin",
-    "gdc_output_dir": "/output",
-    "gdc_bam_files.json": "",
+    "gdc_reference_seq_fa": "/data/reference/GRCh38.d1.vd1.fa",
+    "dbsnp_known_snp_sites": "/data/variations/dbsnp_144.hg38.vcf.gz",
+    "known_indels": "/data/variations/dbsnp_144.hg38.vcf.gz",
+    "gdc_executables_dir": "~/anaconda3/envs/gdc/bin",
+    "gdc_output_dir": "~/scratch/GDC-Pipeline-Output",
+    "gdc_bam_files.json": "~/documents/gastric_bam_data.json",
     "gdc_executables.json": "",
     "gdc_run_dir": "",
-    "gdc_somaticsniper_enabled": true,
-    "gdc_muse_enabled": true,
-    "gdc_varscan_enabled": true,
-    "gdc_strelka2_somatic_enabled": true,
-    "STRELKA_INSTALL_PATH": "/opt/strelka-2.9.10.centos6_x86_64"
+    "gdc_somaticsniper_enabled": false,
+    "gdc_muse_enabled": false,
+    "gdc_varscan_enabled": false,
+    "gdc_strelka2_somatic_enabled": false,
+    "gdc_strelka2_germline_enabled": true,
+    "STRELKA_INSTALL_PATH": "~/strelka-2.9.10.centos6_x86_64"
 }

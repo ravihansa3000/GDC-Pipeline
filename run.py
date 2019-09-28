@@ -43,8 +43,8 @@ def run_gdc_pipeline(params):
 
     for patient, bams in gdc_bam_files.items():
         gdc_patient = GDCPatientDNASeq(patient, bams)
-        merged_bams = gdc_patient.process_patient_seq_data()
-        gdc_patient.run_variant_callers(merged_bams)
+        cleaned_bams = gdc_patient.process_patient_seq_data()
+        gdc_patient.run_variant_callers(cleaned_bams)
 
     LOGGER.info("Waiting for GDC Pipeline tasks to complete...")
     parsl.wait_for_current_tasks()
@@ -55,7 +55,9 @@ def validate_config(params):
     missing_bam_files = []
     gdc_bam_files = params['gdc_bam_files']
     for patient, bams in gdc_bam_files.items():
-        for tissue in ['tumor', 'normal']:
+        if not 'normal' in bams:
+            raise RuntimeError(f"Patient {patient} record does not contain a normal BAM file record")
+        for tissue in bams:
             bam_file = bams[tissue]
             if not os.path.exists(bam_file):
                 LOGGER.error(f"BAM file: {bam_file} not found for patient: {patient}")
@@ -99,16 +101,11 @@ def load_configs():
     print(f" ======== Running GDC Pipeline ========")
     print(json.dumps(gdc_config, indent=4))
 
-    load_defaults(gdc_config, 'gdc_output_dir',
-                  os.path.join(dir_path, 'output'))
-
+    load_defaults(gdc_config, 'gdc_output_dir', os.path.join(dir_path, 'output'))
     gdc_output_dir = gdc_config['gdc_output_dir']
-    load_defaults(gdc_config, 'gdc_run_dir',
-                  os.path.join(gdc_output_dir, 'runinfo'))
-    load_defaults(gdc_config, 'gdc_bam_files.json',
-                  os.path.join(dir_path, 'documents', 'data.json'))
-    load_defaults(gdc_config, 'gdc_executables.json',
-                  os.path.join(dir_path, 'documents', 'executables.json'))
+    load_defaults(gdc_config, 'gdc_run_dir', os.path.join(gdc_output_dir, 'runinfo'))
+    load_defaults(gdc_config, 'gdc_bam_files.json', os.path.join(dir_path, 'documents', 'data.json'))
+    load_defaults(gdc_config, 'gdc_executables.json', os.path.join(dir_path, 'documents', 'executables.json'))
 
     with open(gdc_config['gdc_bam_files.json']) as f:
         gdc_config['gdc_bam_files'] = json.load(f)
@@ -131,7 +128,9 @@ def load_configs():
     gdc_data_files = {
         'gdc_reference_seq_fa': gdc_config['gdc_reference_seq_fa'],
         'dbsnp_known_snp_sites': gdc_config['dbsnp_known_snp_sites'],
-        'dbsnp_known_snp_sites_index': "{}.tbi".format(gdc_config['dbsnp_known_snp_sites'])
+        'dbsnp_known_snp_sites_index': "{}.tbi".format(gdc_config['dbsnp_known_snp_sites']),
+        'known_indels': gdc_config['known_indels'],
+        'known_indels_index': "{}.tbi".format(gdc_config['known_indels'])
     }
     gdc_config['gdc_data_files'] = gdc_data_files
 

@@ -82,6 +82,8 @@
     "f2py3.7": "f2py3.7",
     "flask": "flask",
     "gatk": "gatk",
+    "GATK3-3.5_GenomeAnalysisTK.jar": "../opt/gatk-3.5/GenomeAnalysisTK.jar",
+    "GATK4-4.0.4.0_GenomeAnalysisTK.jar": "../share/gatk4-4.0.4.0-0/gatk-package-4.0.4.0-local.jar",
     "get_objgraph": "get_objgraph",
     "idle3": "idle3",
     "idle3.7": "idle3.7",

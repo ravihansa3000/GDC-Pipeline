@@ -41,9 +41,10 @@ class GDCPatientDNASeq:
         LOGGER.debug(f"patient_workdir created: {self.patient_workdir}")
 
         # List of BAM files that belong to the same read group that will be merged into a single BAM file
-        merged_bams = {}
+        # and then cleaned (indel-realined with BQSR engine) via GDC co-cleaning workflow
+        cleaned_bams = {}
 
-        for tissue in ['tumor', 'normal']:
+        for tissue in self.bams:
             tissue_bam = self.bams[tissue]
             _, tail = os.path.split(tissue_bam)
             bam_workdir = os.path.join(self.patient_workdir, tail.replace('.bam', ''))
@@ -66,16 +67,30 @@ class GDCPatientDNASeq:
             LOGGER.info(
                 f"Running merge_and_mark_duplicates: merged_bam_file: {merged_bam_file}, tissue_bam: {tissue_bam}")
 
-            merged_bams[tissue] = apps.merge_and_mark_duplicates(
+            merge_mark_output = apps.merge_and_mark_duplicates(
                 GDCPatientDNASeq.gdc_executables,
                 os.path.join(merge_output_dir, 'tmp'),
                 inputs=aligned_bams,
                 outputs=[merged_bam_file],
                 label=self.patient
             ).outputs[0]
+            LOGGER.debug(f"merged_bam: patient: {self.patient} | {merge_mark_output}")
 
-        LOGGER.debug(f"merged_bams: patient: {self.patient} | {str(merged_bams)}")
-        return merged_bams
+            co_clean_output_dir = os.path.join(bam_workdir, 'co_clean')
+            cleaned_bam_file = os.path.join(co_clean_output_dir, tail.replace('.bam', '.cleaned.bam'))
+            cleaned_bams[tissue] = apps.co_cleaning_pipeline(
+                GDCPatientDNASeq.gdc_executables,
+                GDCPatientDNASeq.gdc_data_files['gdc_reference_seq_fa'],
+                GDCPatientDNASeq.gdc_data_files['dbsnp_known_snp_sites'],
+                GDCPatientDNASeq.gdc_data_files['known_indels'],
+                input_bam=merge_mark_output,
+                output_dir=co_clean_output_dir,
+                outputs=[cleaned_bam_file],
+                label=self.patient
+            ).outputs[0]
+            LOGGER.debug(f"co_cleaning_pipeline: patient: {self.patient} | {cleaned_bams[tissue]}")
+
+        return cleaned_bams
 
     def do_pre_alignment(self, tissue_bam, bam_workdir):
         _, tail = os.path.split(tissue_bam)
@@ -148,43 +163,54 @@ class GDCPatientDNASeq:
             f"align_and_sort: patient: {self.patient} | aligned_bams: {str(aligned_bams)}")
         return aligned_bams
 
-    def run_variant_callers(self, merged_bams):
+    def validate_analysis_input(self, cleaned_bams, has_tumor=True, has_normal=True):
+        if has_normal and not 'normal' in cleaned_bams:
+            raise RuntimeError("Somatic analysis failed for patient {self.patient}: missing normal BAM file")
+
+        if has_tumor and not 'tumor' in cleaned_bams:
+            raise RuntimeError("Somatic analysis failed for patient {self.patient}: missing tumor BAM file")
+
+    def run_variant_callers(self, cleaned_bams):
         if GDCPatientDNASeq.gdc_params.get('gdc_somaticsniper_enabled', False):
+            self.validate_analysis_input(cleaned_bams)
             LOGGER.info(f"Running somaticsniper: patient: {self.patient}")
             apps.somaticsniper(
                 GDCPatientDNASeq.gdc_executables,
                 GDCPatientDNASeq.gdc_data_files['gdc_reference_seq_fa'],
-                merged_bams['normal'],
-                merged_bams['tumor'],
+                cleaned_bams['normal'],
+                cleaned_bams['tumor'],
                 self.patient_workdir,
                 label='{}-somaticsniper'.format(self.patient)
             )
 
         if GDCPatientDNASeq.gdc_params.get('gdc_muse_enabled', False):
+            self.validate_analysis_input(cleaned_bams)
             LOGGER.info(f"Running muse: patient: {self.patient}")
             apps.muse(
                 GDCPatientDNASeq.gdc_executables,
                 GDCPatientDNASeq.gdc_data_files['gdc_reference_seq_fa'],
-                merged_bams['normal'],
-                merged_bams['tumor'],
+                cleaned_bams['normal'],
+                cleaned_bams['tumor'],
                 GDCPatientDNASeq.gdc_data_files['dbsnp_known_snp_sites'],
                 self.patient_workdir,
                 label='{}-muse'.format(self.patient)
             )
 
         if GDCPatientDNASeq.gdc_params.get('gdc_varscan_enabled', False):
+            self.validate_analysis_input(cleaned_bams)
             LOGGER.info(f"Running varscan: patient: {self.patient}")
             apps.varscan(
                 GDCPatientDNASeq.gdc_executables,
                 os.path.join(self.patient_workdir, 'tmp'),
                 GDCPatientDNASeq.gdc_data_files['gdc_reference_seq_fa'],
-                merged_bams['normal'],
-                merged_bams['tumor'],
+                cleaned_bams['normal'],
+                cleaned_bams['tumor'],
                 self.patient_workdir,
                 label='{}-varscan'.format(self.patient)
             )
 
         if GDCPatientDNASeq.gdc_params.get('gdc_strelka2_somatic_enabled', False):
+            self.validate_analysis_input(cleaned_bams)
             somatic_analysis_path = os.path.join(self.patient_workdir, 'strelka2-analysis-somatic')
             if not os.path.exists(somatic_analysis_path):
                 os.makedirs(somatic_analysis_path)
@@ -193,18 +219,20 @@ class GDCPatientDNASeq:
             somatic_output = [indels_output, snvs_output]
 
             LOGGER.info(
-                f"Running strelka2 somatic analysis: patient: {self.patient}, analysis_output: {somatic_analysis_path}")
+                f"Running strelka2 somatic analysis: patient: {self.patient}, \
+                analysis_output: {somatic_analysis_path}")
             apps.strelka2_somatic(
                 GDCPatientDNASeq.gdc_executables,
                 GDCPatientDNASeq.gdc_data_files['gdc_reference_seq_fa'],
-                merged_bams['normal'],
-                merged_bams['tumor'],
+                cleaned_bams['normal'],
+                cleaned_bams['tumor'],
                 somatic_analysis_path,
                 somatic_output,
                 label='{}-strelka2-somatic'.format(self.patient)
             )
 
         if GDCPatientDNASeq.gdc_params.get('gdc_strelka2_germline_enabled', False):
+            self.validate_analysis_input(cleaned_bams, False)
             germline_analysis_path = os.path.join(self.patient_workdir, 'strelka2-analysis-germline')
             if not os.path.exists(germline_analysis_path):
                 os.makedirs(germline_analysis_path)
@@ -212,11 +240,12 @@ class GDCPatientDNASeq:
             germline_output = [variant_output]
 
             LOGGER.info(
-                f"Running strelka2 germline analysis: patient: {self.patient}, analysis_output: {germline_analysis_path}")
+                f"Running strelka2 germline analysis: patient: {self.patient}, \
+                analysis_output: {germline_analysis_path}")
             apps.strelka2_germline(
                 GDCPatientDNASeq.gdc_executables,
                 GDCPatientDNASeq.gdc_data_files['gdc_reference_seq_fa'],
-                merged_bams['normal'],
+                cleaned_bams['normal'],
                 germline_analysis_path,
                 germline_output,
                 label='{}-strelka2-germline'.format(self.patient)
