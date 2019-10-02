@@ -1,18 +1,19 @@
-#https://sourceforge.net/p/bio-bwa/mailman/message/35608412/mkdir -p ~/.local/bin
+#!/bin/bash
+
+############################################
+# Install script for GDC Pipeline Workflow #
+############################################
+
 dir=$(mktemp -d)
 cd "$dir"
 
 conda create --name gdc
 source activate gdc
 
-
-conda install gatk
+pip install pysqlite3
 
 ### biobambam ver. 2.0.87 -updated to most recent version
 conda install -y -c bioconda biobambam=2.0.87
-
-# bedtools bamtofastq is a conversion utility for extracting FASTQ records from sequence alignments in BAM format.
-conda install -c bioconda bedtools
 
 ### bwa ver. 0.7.15
 conda install -y -c bioconda  bwa=0.7.15
@@ -28,7 +29,7 @@ conda install -y -c bioconda varscan=2.4.0
 
 ### GATK ver. 4.0.4.0
 # only used in tumor-only workflow
-# conda install -y -c bioconda gatk4=4.0.4.0
+conda install -y -c bioconda gatk4=4.0.4.0
 
 ### samtools ver. 1.3.1
 wget https://github.com/samtools/samtools/releases/download/1.3.1/samtools-1.3.1.tar.bz2
@@ -46,22 +47,20 @@ conda install -y -c bioconda muse=1.0.rc
 
 ### GATK ver. 3.5-5 GDC ver. nightly-2016-02-25gf39d340
 #FIXME: does not give GenomeAnalysis.tk file due to licensing
-#conda install -y -c bioconda gatk=3.5
+conda install -y -c bioconda gatk=3.5
 
 
-### dbSNP ver. 144 - currently does not work
-#wget ftp://gsapubftp-anonymous@ftp.broadinstitute.org/bundle/hg38/
+### dbSNP ver. 144
+wget ftp://gsapubftp-anonymous@ftp.broadinstitute.org/bundle/hg38/dbsnp_144.hg38.vcf.gz
+wget ftp://gsapubftp-anonymous@ftp.broadinstitute.org/bundle/hg38/dbsnp_144.hg38.vcf.gz.tbi
 
-### alternative to dbSNP currently being used
-wget ftp://ftp.ncbi.nih.gov/snp/organisms/human_9606/VCF/GATK/common_all_20180418.vcf.gz
+
+### GDC co-cleaning workflow - known indels
+wget ftp://gsapubftp-anonymous@ftp.broadinstitute.org/bundle/hg38/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz
+wget ftp://gsapubftp-anonymous@ftp.broadinstitute.org/bundle/hg38/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz.tbi
 
 ### bcftools
 conda install -c bioconda bcftools tabix
-
-### tool for bgzipping alternative dbSNP file
-bcftools view common_all_20180418.vcf -Oz -o common_all_20180418.vcf.gz
-tabix common_all_20180418.vcf.gz
-add common
 
 
 cd -
