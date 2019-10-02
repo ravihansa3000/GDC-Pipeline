@@ -163,16 +163,18 @@ class GDCPatientDNASeq:
             f"align_and_sort: patient: {self.patient} | aligned_bams: {str(aligned_bams)}")
         return aligned_bams
 
-    def validate_analysis_input(self, cleaned_bams, has_tumor=True, has_normal=True):
-        if has_normal and not 'normal' in cleaned_bams:
-            raise RuntimeError("Somatic analysis failed for patient {self.patient}: missing normal BAM file")
+    def validate_analysis_input(self, cleaned_bams, has_tumor=True):
+        if not 'normal' in cleaned_bams:
+            raise RuntimeError("Invalid input format | patient {self.patient}: missing normal BAM file")
 
         if has_tumor and not 'tumor' in cleaned_bams:
-            raise RuntimeError("Somatic analysis failed for patient {self.patient}: missing tumor BAM file")
+            return False
+
+        return True
 
     def run_variant_callers(self, cleaned_bams):
-        if GDCPatientDNASeq.gdc_params.get('gdc_somaticsniper_enabled', False):
-            self.validate_analysis_input(cleaned_bams)
+        if (GDCPatientDNASeq.gdc_params.get('gdc_somaticsniper_enabled', False) and
+                self.validate_analysis_input(cleaned_bams)):
             LOGGER.info(f"Running somaticsniper: patient: {self.patient}")
             apps.somaticsniper(
                 GDCPatientDNASeq.gdc_executables,
@@ -183,8 +185,8 @@ class GDCPatientDNASeq:
                 label='{}-somaticsniper'.format(self.patient)
             )
 
-        if GDCPatientDNASeq.gdc_params.get('gdc_muse_enabled', False):
-            self.validate_analysis_input(cleaned_bams)
+        if (GDCPatientDNASeq.gdc_params.get('gdc_muse_enabled', False) and
+                self.validate_analysis_input(cleaned_bams)):
             LOGGER.info(f"Running muse: patient: {self.patient}")
             apps.muse(
                 GDCPatientDNASeq.gdc_executables,
@@ -196,8 +198,8 @@ class GDCPatientDNASeq:
                 label='{}-muse'.format(self.patient)
             )
 
-        if GDCPatientDNASeq.gdc_params.get('gdc_varscan_enabled', False):
-            self.validate_analysis_input(cleaned_bams)
+        if (GDCPatientDNASeq.gdc_params.get('gdc_varscan_enabled', False) and
+                self.validate_analysis_input(cleaned_bams)):
             LOGGER.info(f"Running varscan: patient: {self.patient}")
             apps.varscan(
                 GDCPatientDNASeq.gdc_executables,
@@ -209,8 +211,8 @@ class GDCPatientDNASeq:
                 label='{}-varscan'.format(self.patient)
             )
 
-        if GDCPatientDNASeq.gdc_params.get('gdc_strelka2_somatic_enabled', False):
-            self.validate_analysis_input(cleaned_bams)
+        if (GDCPatientDNASeq.gdc_params.get('gdc_strelka2_somatic_enabled', False) and
+                self.validate_analysis_input(cleaned_bams)):
             somatic_analysis_path = os.path.join(self.patient_workdir, 'strelka2-analysis-somatic')
             if not os.path.exists(somatic_analysis_path):
                 os.makedirs(somatic_analysis_path)
@@ -231,8 +233,8 @@ class GDCPatientDNASeq:
                 label='{}-strelka2-somatic'.format(self.patient)
             )
 
-        if GDCPatientDNASeq.gdc_params.get('gdc_strelka2_germline_enabled', False):
-            self.validate_analysis_input(cleaned_bams, False)
+        if (GDCPatientDNASeq.gdc_params.get('gdc_strelka2_germline_enabled', False) and
+                self.validate_analysis_input(cleaned_bams, False)):
             germline_analysis_path = os.path.join(self.patient_workdir, 'strelka2-analysis-germline')
             if not os.path.exists(germline_analysis_path):
                 os.makedirs(germline_analysis_path)
