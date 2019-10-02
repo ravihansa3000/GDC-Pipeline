@@ -3,13 +3,9 @@
 NOTE: on ASPIRE 1, it is necessary to force compilation of the zmq bindings. First,
 make sure that all versions of pyzmq are removed from the path. Then set up your
 environment using anaconda3, installing pyzmq FIRST:
-    conda create --name swag
-    source activate swag
+    conda create --name gdc
+    source activate gdc
     pip install --no-binary pyzmq pyzmq
-    cd Swag
-    python setup.py install
-
-Alternatively, you can run `python setup.py develop` instead of `python setup.py install`.
 
 """
 import os
@@ -29,37 +25,47 @@ from parsl.executors.threads import ThreadPoolExecutor
 # walltime = '120:00:00'
 # max_blocks = 1
 
+# dev queue
+# nodes = 1
+# walltime = '06:00:00'
+# max_blocks = 1
+
 # debug queue
-nodes = 2
-walltime ='02:00:00'
-max_blocks = 1
+# nodes = 2
+# walltime = '24:00:00'
+# max_blocks = 1
 
 # medium queue
-# nodes = 4
-# walltime = '24:00:00'
-# max_blocks = 3
+nodes = 1
+walltime = '23:00:00'
+max_blocks = 3
 
 config = Config(
     executors=[
         HighThroughputExecutor(
             label="htex",
             cores_per_worker=3,
-address=address_by_interface('ib0'),
-    provider=PBSProProvider(
-        launcher=MpiRunLauncher(),
-        scheduler_options='#PBS -P 11001079',
-        worker_init='module load gromacs; export PYTHONPATH={}:$PYTHONPATH'.format(os.path.abspath('.')),
-        nodes_per_block=nodes,
-        max_blocks=max_blocks,
-        cpus_per_node=24,
-        walltime=walltime
-   ),
+            heartbeat_period=15,
+            heartbeat_threshold=120,
+            worker_debug=True,
+            max_workers=3,
+            address=address_by_interface('ib0'),
+            provider=PBSProProvider(
+                launcher=MpiRunLauncher(),
+                scheduler_options='#PBS -P 11001079',
+                worker_init='source activate gdc; module load gromacs; export PYTHONPATH={}:$PYTHONPATH'.format(
+                    os.path.abspath('.')),
+                nodes_per_block=nodes,
+                max_blocks=max_blocks,
+                cpus_per_node=18,
+                walltime=walltime
+            ),
         ),
     ],
     monitoring=MonitoringHub(
         hub_address=address_by_interface('ib0'),
         hub_port=55055,
-        logging_level=logging.INFO,
+        logging_level=logging.DEBUG,
         resource_monitoring_interval=10,
     ),
     strategy='simple',

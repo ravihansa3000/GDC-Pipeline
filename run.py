@@ -28,6 +28,10 @@ def setup_gdc_pipeline(params):
     config.checkpoint_files = get_all_checkpoints()
     config.checkpoint_mode = 'task_exit'
 
+    # Setup monitoring
+    if config.monitoring is not None:
+        config.monitoring.logging_endpoint = "sqlite:///{}/monitoring.db".format(gdc_output_dir)
+
 
 def run_gdc_pipeline(params):
     gdc_bam_files = params['gdc_bam_files']
