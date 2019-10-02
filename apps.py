@@ -136,7 +136,7 @@ def merge_and_mark_duplicates(
         stdout=parsl.AUTO_LOGNAME):
     if len(inputs) == 1:  # cannot merge a single file
         merge_cmd = """
-        mv {input_bam} {merged_bam} && \
+        cp {input_bam} {merged_bam} && \
         """.format(input_bam=inputs[0], merged_bam=outputs[0].replace('.bam', '.dupes.bam'))
     else:
         merge_cmd = """
@@ -424,13 +424,17 @@ def strelka2_somatic(
         stderr=parsl.AUTO_LOGNAME,
         stdout=parsl.AUTO_LOGNAME):
     cmd = """
-    {strelka2_somatic_configure} \
-        --referenceFasta {reference} \
-        --callMemMb 2048 \
-        --exome \
-        --tumorBam {tumor} \
-        --normalBam {normal} \
-        --runDir {analysis_output} && \
+    set -e
+    WORKFLOW_FILE={strelka2_analysis_run}
+    if [ ! -f $WORKFLOW_FILE ]; then
+        {strelka2_somatic_configure} \
+            --referenceFasta {reference} \
+            --callMemMb 2048 \
+            --exome \
+            --tumorBam {tumor} \
+            --normalBam {normal} \
+            --runDir {analysis_output}
+    fi
 
     {strelka2_analysis_run} -m local -j 8
     """.format(
@@ -456,12 +460,16 @@ def strelka2_germline(
         stderr=parsl.AUTO_LOGNAME,
         stdout=parsl.AUTO_LOGNAME):
     cmd = """
-    {strelka2_germline_configure} \
-        --referenceFasta {reference} \
-        --callMemMb 2048 \
-        --exome \
-        --bam {bam} \
-        --runDir {analysis_output} && \
+    set -e
+    WORKFLOW_FILE={strelka2_analysis_run}
+    if [ ! -f $WORKFLOW_FILE ]; then
+        {strelka2_germline_configure} \
+            --referenceFasta {reference} \
+            --callMemMb 2048 \
+            --exome \
+            --bam {bam} \
+            --runDir {analysis_output}
+    fi
 
     {strelka2_analysis_run} -m local -j 8
     """.format(
