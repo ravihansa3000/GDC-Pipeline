@@ -17,9 +17,6 @@ def setup_gdc_pipeline(params):
     gdc_output_dir = params['gdc_output_dir']
     gdc_run_dir = params['gdc_run_dir']
 
-    if not os.path.exists(gdc_output_dir):
-        os.makedirs(gdc_output_dir)
-
     if not os.path.exists(gdc_run_dir):
         os.makedirs(gdc_run_dir)
     config.run_dir = gdc_run_dir
@@ -47,7 +44,12 @@ def run_gdc_pipeline(params):
 
     for patient, bams in gdc_bam_files.items():
         gdc_patient = GDCPatientDNASeq(patient, bams)
-        cleaned_bams = gdc_patient.process_patient_seq_data()
+        cleaned_bams = {}
+        if ('cleaned' in bams) and (bams['cleaned'] == True):
+            cleaned_bams = bams
+        else:
+            cleaned_bams = gdc_patient.process_patient_seq_data()
+
         gdc_patient.run_variant_callers(cleaned_bams)
 
     LOGGER.info("Waiting for GDC Pipeline tasks to complete...")
@@ -66,9 +68,10 @@ def validate_config(params):
             if not os.path.exists(bam_file):
                 LOGGER.error(f"BAM file: {bam_file} not found for patient: {patient}")
                 missing_bam_files.append(bam_file)
+
     if missing_bam_files:
         LOGGER.error(f"Missing BAM files: {str(missing_bam_files)}")
-        raise RuntimeError("GDC Pipeline validation failed.")
+        raise RuntimeError(f"GDC Pipeline validation failed | missing BAM files: {str(missing_bam_files)}")
 
     missing_executables = []
     gdc_executables = params['gdc_executables']
@@ -76,9 +79,10 @@ def validate_config(params):
         if not os.path.exists(val):
             LOGGER.error(f"Executable: {val} not found for key: {key}")
             missing_executables.append(val)
+
     if missing_executables:
         LOGGER.error(f"Missing dependencies: {str(missing_executables)}")
-        raise RuntimeError("GDC Pipeline validation failed.")
+        raise RuntimeError(f"GDC Pipeline validation failed | missing dependencies: {str(missing_executables)}")
 
     missing_data_files = []
 
@@ -87,14 +91,20 @@ def validate_config(params):
         if not os.path.exists(val):
             LOGGER.error(f"Data File: {val} not found for key: {key}")
             missing_data_files.append(val)
+
     if missing_data_files:
-        LOGGER.error(f"Missing data files: {str(missing_executables)}")
-        raise RuntimeError("GDC Pipeline validation failed.")
+        LOGGER.error(f"Missing data files: {str(missing_data_files)}")
+        raise RuntimeError(f"GDC Pipeline validation failed | missing data files: {str(missing_data_files)}")
 
 
 def load_defaults(params, key, val):
     if (key not in params or params[key] is None or params[key] == ''):
         params[key] = val
+
+
+def load_defaults_dir(params, key, val):
+    load_defaults(params, key, val)
+    params[key] = os.path.expanduser(params[key])
 
 
 def load_configs():
@@ -105,11 +115,13 @@ def load_configs():
     print(f" ======== Running GDC Pipeline ========")
     print(json.dumps(gdc_config, indent=4))
 
-    load_defaults(gdc_config, 'gdc_output_dir', os.path.join(dir_path, 'output'))
+    load_defaults_dir(gdc_config, 'gdc_output_dir', os.path.join(dir_path, 'output'))
     gdc_output_dir = gdc_config['gdc_output_dir']
-    load_defaults(gdc_config, 'gdc_run_dir', os.path.join(gdc_output_dir, 'runinfo'))
-    load_defaults(gdc_config, 'gdc_bam_files.json', os.path.join(dir_path, 'documents', 'data.json'))
-    load_defaults(gdc_config, 'gdc_executables.json', os.path.join(dir_path, 'documents', 'executables.json'))
+    load_defaults_dir(gdc_config, 'gdc_run_dir', os.path.join(gdc_output_dir, 'runinfo'))
+    load_defaults_dir(gdc_config, 'gdc_bam_files.json', os.path.join(dir_path, 'documents', 'data.json'))
+    load_defaults_dir(gdc_config, 'gdc_executables.json', os.path.join(dir_path, 'documents', 'executables.json'))
+    load_defaults_dir(gdc_config, 'gdc_executables_dir', os.path.join('~', 'anaconda3', 'envs', 'gdc', 'bin'))
+    load_defaults_dir(gdc_config, 'STRELKA_INSTALL_PATH', gdc_config['gdc_executables_dir'])
 
     with open(gdc_config['gdc_bam_files.json']) as f:
         gdc_config['gdc_bam_files'] = json.load(f)
@@ -121,7 +133,7 @@ def load_configs():
         gdc_executables[key] = os.path.join(gdc_config['gdc_executables_dir'], val)
 
     if gdc_config.get('gdc_strelka2_somatic_enabled', False) or gdc_config.get('gdc_strelka2_germline_enabled', False):
-        strelka2_install_path = gdc_config.get('STRELKA_INSTALL_PATH', gdc_config['gdc_executables_dir'])
+        strelka2_install_path = gdc_config['STRELKA_INSTALL_PATH']
         gdc_executables['strelka2_somatic_configure'] = os.path.join(
             strelka2_install_path, 'bin', 'configureStrelkaSomaticWorkflow.py')
         gdc_executables['strelka2_germline_configure'] = os.path.join(
@@ -142,12 +154,18 @@ def load_configs():
 
 
 def setup_logger(params, logger_obj):
+    print("****** Setting up GDC Pipeline ******")
+    print(json.dumps(params, indent=4))
     log_level = os.getenv('log_level', params.get('log_level', 'INFO')).upper()
     formatter = logging.Formatter(
         '%(asctime)s %(name)s [%(levelname)s]  %(message)s')
     logger_obj.setLevel(log_level)
 
-    fh = logging.FileHandler(os.path.join(params['gdc_output_dir'], 'GDC_Pipeline.log'))
+    gdc_output_dir = params['gdc_output_dir']
+    if not os.path.exists(gdc_output_dir):
+        os.makedirs(gdc_output_dir)
+
+    fh = logging.FileHandler(os.path.join(gdc_output_dir, 'GDC_Pipeline.log'))
     fh.setLevel(log_level)
     fh.setFormatter(formatter)
     logger_obj.addHandler(fh)
@@ -156,6 +174,8 @@ def setup_logger(params, logger_obj):
     ch.setLevel(log_level)
     ch.setFormatter(formatter)
     logger_obj.addHandler(ch)
+
+    logger_obj.info("****** setup complete ******")
 
 
 def main(argv):
