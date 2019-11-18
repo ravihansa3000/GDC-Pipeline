@@ -16,7 +16,7 @@ def sort_bam_by_queryname(
     mkdir -p {tmpdir} && \
 
     {java} \
-        -Xmx2g \
+        -Xmx8G \
         -Djava.io.tmpdir={tmpdir} \
         -jar {picard} \
         SortSam \
@@ -98,7 +98,7 @@ def align_and_sort(
     mkdir -p {tmpdir} && \
 
     {java} \
-        -Xmx2g \
+        -Xmx8G \
         -Djava.io.tmpdir={tmpdir} \
         -jar {picard} \
         SortSam \
@@ -141,7 +141,7 @@ def merge_and_mark_duplicates(
     else:
         merge_cmd = """
         {java} \
-            -Xmx2g \
+            -Xmx8G \
             -Djava.io.tmpdir={tmpdir} \
             -jar {picard} \
             MergeSamFiles \
@@ -170,7 +170,7 @@ def merge_and_mark_duplicates(
     {samtools} view -o {cleaned}  -f 0x2 {merged} && \
 
     {java} \
-        -Xmx2g \
+        -Xmx8G \
         -Djava.io.tmpdir={tmpdir} \
         -jar {picard} \
         MarkDuplicates \
@@ -210,6 +210,7 @@ def co_cleaning_pipeline(
     mkdir -p {output_dir} && \
 
     {java} \
+        -Xmx8G \
         -jar {gatk3_jar} \
         -T RealignerTargetCreator \
         -R {reference} \
@@ -218,6 +219,7 @@ def co_cleaning_pipeline(
         -o {realigner_target_output} && \
 
     {java} \
+        -Xmx8G \
         -jar {gatk3_jar} \
         -T IndelRealigner \
         -R {reference} \
@@ -228,6 +230,7 @@ def co_cleaning_pipeline(
         -o {indel_realigner_output} && \
 
     {java} \
+        -Xmx8G \
         -jar {gatk3_jar} \
         -T BaseRecalibrator \
         -R {reference} \
@@ -236,6 +239,7 @@ def co_cleaning_pipeline(
         -o {recal_output} && \
 
     {java} \
+        -Xmx8G \
         -jar {gatk3_jar} \
         -T PrintReads \
         -R {reference} \
@@ -327,7 +331,7 @@ def varscan(
     mkdir -p {tmpdir} && \
 
     {java} \
-        -Xmx2g \
+        -Xmx8G \
         -Djava.io.tmpdir={tmpdir} \
         -jar {varscan} \
         somatic \
@@ -347,7 +351,7 @@ def varscan(
         --output-vcf {output}/varscan.vcf && \
 
     {java} \
-        -Xmx2g \
+        -Xmx8G \
         -Djava.io.tmpdir={tmpdir} \
         -jar {varscan} \
         processSomatic \
@@ -384,7 +388,7 @@ def mutect2(
         stdout=parsl.AUTO_LOGNAME):
     cmd = """
     {java} \
-        -Xmx2g \
+        -Xmx8G \
         -Djava.io.tmpdir={tmpdir} \
         -jar {gatk4_jar} \
         -T MuTect2 \
@@ -436,7 +440,7 @@ def strelka2_somatic(
             --runDir {analysis_output}
     fi
 
-    {strelka2_analysis_run} -m local -j 8
+    {strelka2_analysis_run} -m local -j 1
     """.format(
         strelka2_somatic_configure=executables['strelka2_somatic_configure'],
         analysis_output=analysis_output,
@@ -471,7 +475,7 @@ def strelka2_germline(
             --runDir {analysis_output}
     fi
 
-    {strelka2_analysis_run} -m local -j 8
+    {strelka2_analysis_run} -m local -j 1
     """.format(
         strelka2_germline_configure=executables['strelka2_germline_configure'],
         analysis_output=analysis_output,
