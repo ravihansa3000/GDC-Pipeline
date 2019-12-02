@@ -18,6 +18,6 @@ output/
 config/parsl_config.py
 
 # GDC config file - contains user specific GDC pipeline config data
-config/gdc_config_local.json
+config/gdc_config.json
 
 .ipynb_checkpoints/

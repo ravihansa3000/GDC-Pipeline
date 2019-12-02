@@ -31,10 +31,12 @@ class GDCPatientDNASeq:
     gdc_params = {}
 
     def __init__(self, patient, bams, label=None):
-        if label is None:
+        LOGGER.debug(f"GDCPatientDNASeq patient: {patient} | bams: {str(bams)}")
+        if label is None or label == '':
             self.patient = patient
             self.patient_workdir = os.path.join(GDCPatientDNASeq.gdc_output_dir, patient)
         else:
+            LOGGER.debug(f"GDCPatientDNASeq label: {label}")
             self.patient = f"patient_{label}"
             self.patient_workdir = os.path.join(GDCPatientDNASeq.gdc_output_dir, patient, label)
 

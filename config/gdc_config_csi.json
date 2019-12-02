@@ -1,6 +1,6 @@
 {
-    "campaign_name": "TCGA_OV_1",
-    "parsl_config": "CSI",
+    "campaign_name": "",
+    "parsl_config_env": "csi",
     "log_level": "debug",
     "gdc_reference_seq_fa": "/opt/GDC-Pipeline-Data/reference/GRCh38.d1.vd1.fa",
     "dbsnp_known_snp_sites": "/opt/GDC-Pipeline-Data/variations/dbsnp_144.hg38.vcf.gz",

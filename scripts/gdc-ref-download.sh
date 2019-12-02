@@ -28,7 +28,7 @@ tar -zxf "${OUTPUT_DIR}/GRCh38.d1.vd1.fa.tar.gz" -C $OUTPUT_DIR
 wget -O "${OUTPUT_DIR}/GRCh38.d1.vd1_BWA.tar.gz" "https://api.gdc.cancer.gov/data/25217ec9-af07-4a17-8db9-101271ee7225"
 tar -zxf GRCh38.d1.vd1_BWA.tar.gz -C $OUTPUT_DIR
 
-wget -O "${OUTPUT_DIR}/strelka-2.9.10.tar.gz" "https://github.com/Illumina/strelka/archive/v2.9.10.tar.gz"
-tar -zxf "${OUTPUT_DIR}/strelka-2.9.10.tar.gz"
+wget -O "${OUTPUT_DIR}/strelka-2.9.10.centos6_x86_64.tar.bz2" "https://github.com/Illumina/strelka/releases/download/v2.9.10/strelka-2.9.10.centos6_x86_64.tar.bz2"
+tar -xf "${OUTPUT_DIR}/strelka-2.9.10.centos6_x86_64.tar.bz2"
 
 printf "=== success ==="

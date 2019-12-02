@@ -4,30 +4,34 @@
 
 ### Create Parsl config file
 
-Create a Python configuration file `parsl_config.py` in workspace `config` dir using one of the available templates (`aspire_config.py.template`, `local_config.py.template`)
+Create a Python configuration file `parsl_config.py` in workspace `config` dir using one of the available templates (`parsl_config.py.template`)
 
 ### Create GDC Pipeline config file
 
 Create a json configuration file `gdc_config.json` in workspace `config` dir using the template `gdc_config.json.template`
 
-### Create conda environment
+### Create run-time environment
 
-```
-conda create --name gdc python=3.7
-source activate gdc
-pip install --no-binary pyzmq pyzmq
-pip install swag
-```
+- Download GDC-Pipeline resource files
 
-### Install dependencies
+    `./scripts/gdc-installer.sh`
 
-Run `scripts/gdc-btools.sh` to install dependencies
+- Generate indexes for genome reference
 
-### RUN command
+    `./scripts/gdc-generate-ref-index.sh`
 
+- Install dependencies and setup conda environment
+
+    `./scripts/gdc-installer.sh`
+
+
+### Run GDC-Pipeline Workflow
+
+- Use configuration defined in `gdc_config.json`
 `python run.py`
 
-`GDC_BAM_INPUT=/home/akila/Documents/NUS_CSI/Parsl/workspace/TCGA_OV_1.json GDC_CONFIG_FILE=/home/akila/Documents/NUS_CSI/Parsl/GDC-Pipeline/config/gdc_config_local.json python ./run.py`
+- Override parameters defined in `gdc_config.json` using environment variables
+`GDC_BAM_INPUT=<input_campaign.json> GDC_CONFIG_FILE=<gdc_config_env.json> python ./run.py`
 
 
 

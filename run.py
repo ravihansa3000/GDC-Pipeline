@@ -1,6 +1,5 @@
 import json
 import os
-import datetime
 import logging
 import sys
 
@@ -25,11 +24,11 @@ def setup_gdc_pipeline(params):
     if not os.path.exists(gdc_run_dir):
         os.makedirs(gdc_run_dir)
 
-    if params['parsl_config_env'] == 'NSCC':
+    if params['parsl_config_env'] == 'nscc':
         parsl_config = get_parsl_config_nscc()
-    elif params['parsl_config_env'] == 'LOCAL':
+    elif params['parsl_config_env'] == 'local':
         parsl_config = get_parsl_config_local()
-    elif params['parsl_config_env'] == 'CSI':
+    elif params['parsl_config_env'] == 'csi':
         parsl_config = get_parsl_config_csi()
 
     parsl_config.run_dir = gdc_run_dir
@@ -62,7 +61,7 @@ def run_gdc_pipeline(params):
 
         gdc_patient = GDCPatientDNASeq(patient, bam_pair, label)
         cleaned_bam_pair = {}
-        if ('cleaned' in bam_pair) and (bam_pair['cleaned'] == True):
+        if ('cleaned' in bam_pair) and (bam_pair['cleaned']):
             cleaned_bam_pair = bam_pair
         else:
             cleaned_bam_pair = gdc_patient.process_patient_seq_data()
@@ -76,7 +75,7 @@ def run_gdc_pipeline(params):
         else:
             count = 1
             for bam_pair in bam_pair_list:
-                process_bam_pair(patient, bam_pair, count)
+                process_bam_pair(patient, bam_pair, str(count))
                 count += 1
 
     LOGGER.info("Waiting for GDC Pipeline tasks to complete...")
@@ -137,6 +136,9 @@ def validate_config(params):
 
 
 def load_defaults(params, key, val):
+    if (val is None or val == ''):
+        return
+
     if (key not in params or params[key] is None or params[key] == ''):
         params[key] = val
 
@@ -148,11 +150,8 @@ def load_defaults_dir(params, key, val):
 
 def load_configs():
     dir_path = os.path.dirname(os.path.realpath(__file__))
-    default_gdc_config_file = os.path.join(dir_path, 'config', 'gdc_config_nscc.json')
+    default_gdc_config_file = os.path.join(dir_path, 'config', 'gdc_config.json')
     gdc_config_file = os.environ.get('GDC_CONFIG_FILE', default_gdc_config_file)
-
-    default_gdc_bam_input = os.path.join(dir_path, 'documents', 'data.json')
-    gdc_bam_input = os.environ.get('GDC_BAM_INPUT', default_gdc_bam_input)
 
     with open(gdc_config_file) as f:
         gdc_config = json.load(f)
@@ -160,16 +159,20 @@ def load_configs():
     print(f" ======== Running GDC Pipeline ========")
     print(json.dumps(gdc_config, indent=4))
 
-    load_defaults(gdc_config, 'parsl_config_env', 'NSCC')
-    timestamp = datetime.datetime.now()
-    timestamp_str = timestamp.strftime('%Y-%d-%m')
-    load_defaults(gdc_config, 'campaign_name', f'Parsl-Campaign_{timestamp_str}')
+    gdc_bam_input = os.getenv('GDC_BAM_INPUT')
+    load_defaults_dir(gdc_config, 'gdc_bam_files.json', gdc_bam_input)
+    if gdc_config['gdc_bam_files.json'] is None or gdc_config['gdc_bam_files.json'] == '':
+        raise Exception('GDC-Pipeline failed | input bam file is missing')
+
+    load_defaults(gdc_config, 'parsl_config_env', 'local')
+    _, tail = os.path.split(gdc_config['gdc_bam_files.json'])
+    campaign_name = tail.replace('.json', '')
+    load_defaults(gdc_config, 'campaign_name', campaign_name)
 
     load_defaults_dir(gdc_config, 'gdc_output_dir', os.path.join(dir_path, 'output'))
     gdc_config['gdc_output_dir'] = os.path.join(gdc_config['gdc_output_dir'], gdc_config['campaign_name'])
 
     load_defaults_dir(gdc_config, 'gdc_run_dir', os.path.join(gdc_config['gdc_output_dir'], 'runinfo'))
-    load_defaults_dir(gdc_config, 'gdc_bam_files.json', gdc_bam_input)
     load_defaults_dir(gdc_config, 'gdc_executables.json', os.path.join(dir_path, 'documents', 'executables.json'))
     load_defaults_dir(gdc_config, 'gdc_executables_dir', os.path.join('~', 'anaconda3', 'envs', 'gdc', 'bin'))
     load_defaults_dir(gdc_config, 'STRELKA_INSTALL_PATH', gdc_config['gdc_executables_dir'])

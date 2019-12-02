@@ -1,6 +1,6 @@
 {
-    "campaign_name": "TCGA_OV_1",
-    "parsl_config_env": "NSCC",
+    "campaign_name": "",
+    "parsl_config_env": "nscc",
     "log_level": "debug",
     "gdc_reference_seq_fa": "/home/projects/11001079/GDC-Pipeline-Data/reference/GRCh38.d1.vd1.fa",
     "dbsnp_known_snp_sites": "/home/projects/11001079/GDC-Pipeline-Data/variations/dbsnp_144.hg38.vcf.gz",

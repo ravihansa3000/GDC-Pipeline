@@ -5,30 +5,36 @@ set -e
 ############################################
 
 CONDA_ENV_GDC='gdc'
-OUTPUT_DIR=${1:-'~/Downloads'}
+OUTPUT_DIR=${1:-~/Downloads}
+mkdir -p $OUTPUT_DIR
 
-conda init bash
+conda update -y -n root conda
 ENVS=$(conda env list | awk '{print $1}')
 source ~/anaconda3/etc/profile.d/conda.sh
 if [[ $ENVS = *"$CONDA_ENV_GDC"* ]]; then
     conda activate $CONDA_ENV_GDC
 else 
-    conda create --name $CONDA_ENV_GDC
+    conda create -y --name $CONDA_ENV_GDC python=3.7
     conda activate $CONDA_ENV_GDC
 fi;
 
+# Install dependencies
+conda install pip
+pip install setuptools
 
 # Parsl framework
 # pip install parsl==0.9.0
 
-# Install latest Parsl - required for Python 3.8
-git clone https://github.com/Parsl/parsl.git $OUTPUT_DIR
+# Install latest Parsl - required for Python 3.7+
+[ -d "$OUTPUT_DIR/parsl" ] && rm -rf "$OUTPUT_DIR/parsl"
+git clone https://github.com/Parsl/parsl.git "$OUTPUT_DIR/parsl"
 cd $OUTPUT_DIR/parsl
 python setup.py install
 cd -
 
 # SWAG framework
-git clone https://github.com/PittGenomics/Swag.git $OUTPUT_DIR
+[ -d "$OUTPUT_DIR/Swag" ] && rm -rf "$OUTPUT_DIR/Swag"
+git clone https://github.com/PittGenomics/Swag.git "$OUTPUT_DIR/Swag"
 cd $OUTPUT_DIR/Swag
 python setup.py install
 cd -

@@ -8,13 +8,14 @@ CONDA_ENV_GDC='gdc'
 GENOME_REF_DIR=${1-'/media/akila/DATA/GDC/GDC-Pipeline-Data/reference'}
 GENOME_REF="$GENOME_REF_DIR/GRCh38.d1.vd1.fa"
 
+conda update -y -n root conda
 ENVS=$(conda env list | awk '{print $1}')
 source ~/anaconda3/etc/profile.d/conda.sh
 if [[ $ENVS = *"$CONDA_ENV_GDC"* ]]; then
     conda activate $CONDA_ENV_GDC
 else 
     echo "creating new conda envrionment: $CONDA_ENV_GDC"
-    conda create --name $CONDA_ENV_GDC
+    conda create -y --name $CONDA_ENV_GDC python=3.7
     conda activate $CONDA_ENV_GDC
 fi;
 
