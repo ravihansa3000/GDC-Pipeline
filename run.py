@@ -1,14 +1,19 @@
 import json
 import os
+import datetime
 import logging
 import sys
+
 import parsl
 from parsl.utils import get_all_checkpoints
 
-from gdc_workflow import GDCPatientDNASeq
 import gdc_workflow
-
-from config.parsl_config import config
+from gdc_workflow import GDCPatientDNASeq
+from config.parsl_config import (
+    get_parsl_config_nscc,
+    get_parsl_config_local,
+    get_parsl_config_csi
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -19,21 +24,30 @@ def setup_gdc_pipeline(params):
 
     if not os.path.exists(gdc_run_dir):
         os.makedirs(gdc_run_dir)
-    config.run_dir = gdc_run_dir
 
-    # Parsl checkpoint is created each time an app completes or fails
-    config.checkpoint_files = get_all_checkpoints()
-    config.checkpoint_mode = 'task_exit'
+    if params['parsl_config_env'] == 'NSCC':
+        parsl_config = get_parsl_config_nscc()
+    elif params['parsl_config_env'] == 'LOCAL':
+        parsl_config = get_parsl_config_local()
+    elif params['parsl_config_env'] == 'CSI':
+        parsl_config = get_parsl_config_csi()
+
+    parsl_config.run_dir = gdc_run_dir
+
+    # Parsl checkpointing: resume using from all available checkpoints
+    parsl_config.checkpoint_files = get_all_checkpoints(gdc_run_dir)
 
     # Setup monitoring
-    if config.monitoring is not None:
-        config.monitoring.logging_endpoint = "sqlite:///{}/monitoring.db".format(gdc_output_dir)
+    if parsl_config.monitoring is not None:
+        parsl_config.monitoring.logging_endpoint = "sqlite:///{}/monitoring.db".format(gdc_output_dir)
+
+    params['parsl_config'] = parsl_config
 
 
 def run_gdc_pipeline(params):
     gdc_bam_files = params['gdc_bam_files']
     parsl.set_stream_logger()
-    parsl.load(config)
+    parsl.load(params['parsl_config'])
     LOGGER.info("GDC Pipeline started!")
 
     GDCPatientDNASeq.gdc_output_dir = params['gdc_output_dir']
@@ -42,15 +56,28 @@ def run_gdc_pipeline(params):
     GDCPatientDNASeq.gdc_params = params
     gdc_workflow.LOGGER = LOGGER
 
-    for patient, bams in gdc_bam_files.items():
-        gdc_patient = GDCPatientDNASeq(patient, bams)
-        cleaned_bams = {}
-        if ('cleaned' in bams) and (bams['cleaned'] == True):
-            cleaned_bams = bams
-        else:
-            cleaned_bams = gdc_patient.process_patient_seq_data()
+    def process_bam_pair(patient, bam_pair, label=None):
+        if isinstance(bam_pair, list):
+            bam_pair = bam_pair[0]
 
-        gdc_patient.run_variant_callers(cleaned_bams)
+        gdc_patient = GDCPatientDNASeq(patient, bam_pair, label)
+        cleaned_bam_pair = {}
+        if ('cleaned' in bam_pair) and (bam_pair['cleaned'] == True):
+            cleaned_bam_pair = bam_pair
+        else:
+            cleaned_bam_pair = gdc_patient.process_patient_seq_data()
+
+        gdc_patient.run_variant_callers(cleaned_bam_pair)
+
+    for patient, bam_pair_list in gdc_bam_files.items():
+        if isinstance(bam_pair_list, dict) or len(bam_pair_list) == 1:
+            process_bam_pair(patient, bam_pair_list)
+
+        else:
+            count = 1
+            for bam_pair in bam_pair_list:
+                process_bam_pair(patient, bam_pair, count)
+                count += 1
 
     LOGGER.info("Waiting for GDC Pipeline tasks to complete...")
     parsl.wait_for_current_tasks()
@@ -60,14 +87,26 @@ def run_gdc_pipeline(params):
 def validate_config(params):
     missing_bam_files = []
     gdc_bam_files = params['gdc_bam_files']
-    for patient, bams in gdc_bam_files.items():
-        if not 'normal' in bams:
+
+    def validate_bam_pair(patient, bam_pair):
+        if isinstance(bam_pair, list):
+            bam_pair = bam_pair[0]
+
+        if not 'normal' in bam_pair:
             raise RuntimeError(f"Patient {patient} record does not contain a normal BAM file record")
-        for tissue in bams:
-            bam_file = bams[tissue]
+
+        for tissue in bam_pair:
+            bam_file = bam_pair[tissue]
             if not os.path.exists(bam_file):
                 LOGGER.error(f"BAM file: {bam_file} not found for patient: {patient}")
                 missing_bam_files.append(bam_file)
+
+    for patient, bam_pair_list in gdc_bam_files.items():
+        if isinstance(bam_pair_list, dict) or len(bam_pair_list) == 1:
+            validate_bam_pair(patient, bam_pair_list)
+        else:
+            for bam_pair in bam_pair_list:
+                validate_bam_pair(patient, bam_pair)
 
     if missing_bam_files:
         LOGGER.error(f"Missing BAM files: {str(missing_bam_files)}")
@@ -109,16 +148,28 @@ def load_defaults_dir(params, key, val):
 
 def load_configs():
     dir_path = os.path.dirname(os.path.realpath(__file__))
-    with open(os.path.join(dir_path, 'config', 'gdc_config.json')) as f:
+    default_gdc_config_file = os.path.join(dir_path, 'config', 'gdc_config_nscc.json')
+    gdc_config_file = os.environ.get('GDC_CONFIG_FILE', default_gdc_config_file)
+
+    default_gdc_bam_input = os.path.join(dir_path, 'documents', 'data.json')
+    gdc_bam_input = os.environ.get('GDC_BAM_INPUT', default_gdc_bam_input)
+
+    with open(gdc_config_file) as f:
         gdc_config = json.load(f)
 
     print(f" ======== Running GDC Pipeline ========")
     print(json.dumps(gdc_config, indent=4))
 
+    load_defaults(gdc_config, 'parsl_config_env', 'NSCC')
+    timestamp = datetime.datetime.now()
+    timestamp_str = timestamp.strftime('%Y-%d-%m')
+    load_defaults(gdc_config, 'campaign_name', f'Parsl-Campaign_{timestamp_str}')
+
     load_defaults_dir(gdc_config, 'gdc_output_dir', os.path.join(dir_path, 'output'))
-    gdc_output_dir = gdc_config['gdc_output_dir']
-    load_defaults_dir(gdc_config, 'gdc_run_dir', os.path.join(gdc_output_dir, 'runinfo'))
-    load_defaults_dir(gdc_config, 'gdc_bam_files.json', os.path.join(dir_path, 'documents', 'data.json'))
+    gdc_config['gdc_output_dir'] = os.path.join(gdc_config['gdc_output_dir'], gdc_config['campaign_name'])
+
+    load_defaults_dir(gdc_config, 'gdc_run_dir', os.path.join(gdc_config['gdc_output_dir'], 'runinfo'))
+    load_defaults_dir(gdc_config, 'gdc_bam_files.json', gdc_bam_input)
     load_defaults_dir(gdc_config, 'gdc_executables.json', os.path.join(dir_path, 'documents', 'executables.json'))
     load_defaults_dir(gdc_config, 'gdc_executables_dir', os.path.join('~', 'anaconda3', 'envs', 'gdc', 'bin'))
     load_defaults_dir(gdc_config, 'STRELKA_INSTALL_PATH', gdc_config['gdc_executables_dir'])
@@ -143,10 +194,13 @@ def load_configs():
 
     gdc_data_files = {
         'gdc_reference_seq_fa': gdc_config['gdc_reference_seq_fa'],
+        'gdc_reference_seq_fa_fai': "{}.fai".format(gdc_config['gdc_reference_seq_fa']),
+        'gdc_reference_seq_fa_dict': "{}.dict".format(gdc_config['gdc_reference_seq_fa']),
         'dbsnp_known_snp_sites': gdc_config['dbsnp_known_snp_sites'],
         'dbsnp_known_snp_sites_index': "{}.tbi".format(gdc_config['dbsnp_known_snp_sites']),
         'known_indels': gdc_config['known_indels'],
-        'known_indels_index': "{}.tbi".format(gdc_config['known_indels'])
+        'known_indels_index': "{}.tbi".format(gdc_config['known_indels']),
+        'gdc_vep_cache_dir': gdc_config['gdc_vep_cache_dir']
     }
     gdc_config['gdc_data_files'] = gdc_data_files
 

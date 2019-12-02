@@ -1,0 +1,115 @@
+"""Configuration for running on ASPIRE 1.
+
+NOTE: on ASPIRE 1, it is necessary to force compilation of the zmq bindings. First,
+make sure that all versions of pyzmq are removed from the path. Then set up your
+environment using anaconda3, installing pyzmq FIRST:
+    conda create --name gdc
+    source activate gdc
+    pip install --no-binary pyzmq pyzmq
+
+"""
+import os
+
+from parsl.providers import PBSProProvider
+from parsl.providers import LocalProvider
+from parsl.launchers import MpiRunLauncher
+from parsl.config import Config
+from parsl.executors import HighThroughputExecutor, ThreadPoolExecutor
+from parsl.addresses import address_by_interface
+from parsl.monitoring.monitoring import MonitoringHub
+
+# long queue
+# NODES_PER_BLOCK = 1
+# WALLTIME = '120:00:00'
+# MAX_BLOCKS = 1
+
+# dev queue
+NODES_PER_BLOCK = 1
+WALLTIME = '06:00:00'
+MAX_BLOCKS = 1
+
+# debug queue
+# NODES_PER_BLOCK = 2
+# WALLTIME = '24:00:00'
+# MAX_BLOCKS = 1
+
+# medium queue
+# NODES_PER_BLOCK = 2
+# WALLTIME = '23:00:00'
+# MAX_BLOCKS = 3
+
+
+def get_parsl_config_nscc():
+    return Config(
+        executors=[
+            HighThroughputExecutor(
+                label="htex",
+                cores_per_worker=6,
+                heartbeat_period=15,
+                heartbeat_threshold=120,
+                worker_debug=True,
+                max_workers=4,
+                address=address_by_interface('ib0'),
+                provider=PBSProProvider(
+                    launcher=MpiRunLauncher(),
+                    scheduler_options='#PBS -P 11001079',
+                    worker_init='cd ~/pbs_home; source activate gdc; module load gromacs;'
+                    'export PYTHONPATH={}:$PYTHONPATH'.format(
+                        os.path.abspath('.')),
+                    nodes_per_block=NODES_PER_BLOCK,
+                    max_blocks=MAX_BLOCKS,
+                    cpus_per_node=24,
+                    walltime=WALLTIME
+                ),
+            ),
+        ],
+        monitoring=MonitoringHub(
+            hub_address=address_by_interface('ib0'),
+            hub_port=55055,
+            resource_monitoring_interval=10,
+        ),
+        strategy='simple',
+        retries=3
+    )
+
+
+def get_parsl_config_local():
+    return Config(
+        executors=[ThreadPoolExecutor()],
+        monitoring=MonitoringHub(
+            hub_address=address_by_interface('lo'),
+            hub_port=55055,
+            resource_monitoring_interval=10,
+        ),
+        retries=3
+    )
+
+
+def get_parsl_config_csi():
+    return Config(
+        executors=[
+            HighThroughputExecutor(
+                label="htex",
+                cores_per_worker=6,
+                heartbeat_period=15,
+                heartbeat_threshold=120,
+                worker_debug=True,
+                max_workers=4,
+                address=address_by_interface('eth0'),
+                provider=LocalProvider(
+                    worker_init='cd ~/pbs_home; source activate gdc;'
+                    'export PYTHONPATH={}:$PYTHONPATH'.format(
+                        os.path.abspath('.')),
+                    nodes_per_block=1,
+                    max_blocks=8,
+                    walltime='24:00:00'
+                ),
+            ),
+        ],
+        monitoring=MonitoringHub(
+            hub_address=address_by_interface('eth0'),
+            hub_port=55055,
+            resource_monitoring_interval=10,
+        ),
+        retries=3
+    )

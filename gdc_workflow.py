@@ -30,9 +30,14 @@ class GDCPatientDNASeq:
     gdc_data_files = {}
     gdc_params = {}
 
-    def __init__(self, patient, bams):
-        self.patient = patient
-        self.patient_workdir = os.path.join(GDCPatientDNASeq.gdc_output_dir, patient)
+    def __init__(self, patient, bams, label=None):
+        if label is None:
+            self.patient = patient
+            self.patient_workdir = os.path.join(GDCPatientDNASeq.gdc_output_dir, patient)
+        else:
+            self.patient = f"patient_{label}"
+            self.patient_workdir = os.path.join(GDCPatientDNASeq.gdc_output_dir, patient, label)
+
         self.bams = bams
 
     def process_patient_seq_data(self):
@@ -172,6 +177,25 @@ class GDCPatientDNASeq:
 
         return True
 
+    def run_annotation_workflow(self, input_vcf_future, input_vcf_list):
+        annotation_out_dir = os.path.join(self.patient_workdir, 'annotations')
+        if not os.path.exists(annotation_out_dir):
+            os.makedirs(annotation_out_dir)
+
+        for input_vcf_gz in input_vcf_list:
+            _, input_vcf_gz_filename = os.path.split(input_vcf_gz)
+            vcf_filename = input_vcf_gz_filename.replace('.gz', '')
+            output_file = f"{annotation_out_dir}/{vcf_filename}"
+            apps.annotatate_vep(
+                GDCPatientDNASeq.gdc_executables,
+                GDCPatientDNASeq.gdc_data_files['gdc_vep_cache_dir'],
+                input_vcf_future,
+                vcf_filename,
+                annotation_out_dir,
+                outputs=[output_file],
+                label=f"{self.patient}-{vcf_filename}-annotations"
+            )
+
     def run_variant_callers(self, cleaned_bams):
         if (GDCPatientDNASeq.gdc_params.get('gdc_somaticsniper_enabled', False) and
                 self.validate_analysis_input(cleaned_bams)):
@@ -216,22 +240,27 @@ class GDCPatientDNASeq:
             somatic_analysis_path = os.path.join(self.patient_workdir, 'strelka2-analysis-somatic')
             if not os.path.exists(somatic_analysis_path):
                 os.makedirs(somatic_analysis_path)
+
             indels_output = os.path.join(somatic_analysis_path, 'results', 'variants', 'somatic.indels.vcf.gz')
             snvs_output = os.path.join(somatic_analysis_path, 'results', 'variants', 'somatic.snvs.vcf.gz')
-            somatic_output = [indels_output, snvs_output]
-
+            somatic_output_list = [indels_output, snvs_output]
             LOGGER.info(
                 f"Running strelka2 somatic analysis: patient: {self.patient}, \
                 analysis_output: {somatic_analysis_path}")
-            apps.strelka2_somatic(
+
+            strelka2_somatic_vcf_future = apps.strelka2_somatic(
                 GDCPatientDNASeq.gdc_executables,
                 GDCPatientDNASeq.gdc_data_files['gdc_reference_seq_fa'],
                 cleaned_bams['normal'],
                 cleaned_bams['tumor'],
                 somatic_analysis_path,
-                somatic_output,
+                outputs=somatic_output_list,
                 label='{}-strelka2-somatic'.format(self.patient)
-            )
+            ).outputs[0]
+            LOGGER.debug(
+                f"""strelka2_somatic: patient: {self.patient} |
+                strelka2_somatic_vcf_future: {str(strelka2_somatic_vcf_future)}""")
+            self.run_annotation_workflow(strelka2_somatic_vcf_future, somatic_output_list)
 
         if (GDCPatientDNASeq.gdc_params.get('gdc_strelka2_germline_enabled', False) and
                 self.validate_analysis_input(cleaned_bams, False)):
@@ -239,16 +268,22 @@ class GDCPatientDNASeq:
             if not os.path.exists(germline_analysis_path):
                 os.makedirs(germline_analysis_path)
             variant_output = os.path.join(germline_analysis_path, 'results', 'variants', 'variants.vcf.gz')
-            germline_output = [variant_output]
+            germline_output_list = [variant_output]
 
             LOGGER.info(
-                f"Running strelka2 germline analysis: patient: {self.patient}, \
-                analysis_output: {germline_analysis_path}")
-            apps.strelka2_germline(
+                f"""Running strelka2 germline analysis: patient: {self.patient},
+                analysis_output: {germline_analysis_path}""")
+
+            strelka2_germline_vcf_future = apps.strelka2_germline(
                 GDCPatientDNASeq.gdc_executables,
                 GDCPatientDNASeq.gdc_data_files['gdc_reference_seq_fa'],
                 cleaned_bams['normal'],
                 germline_analysis_path,
-                germline_output,
+                outputs=germline_output_list,
                 label='{}-strelka2-germline'.format(self.patient)
-            )
+            ).outputs[0]
+
+            LOGGER.debug(
+                f"""strelka2_germline: patient: {self.patient} |
+                strelka2_germline_vcf_future: {str(strelka2_germline_vcf_future)}""")
+            self.run_annotation_workflow(strelka2_germline_vcf_future, germline_output_list)

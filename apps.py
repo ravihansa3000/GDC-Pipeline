@@ -1,5 +1,6 @@
-import parsl
+import os
 
+import parsl
 from parsl.app.app import bash_app
 
 
@@ -110,7 +111,7 @@ def align_and_sort(
         TMP_DIR={tmpdir}
     """.format(
         fastq_dir=fastq_dir,
-        samtools=executables['samtools'],
+        samtools=executables['samtools-1.3.1'],
         bwa=executables['bwa'],
         reference=reference,
         rg_id=rg_id,
@@ -185,7 +186,7 @@ def merge_and_mark_duplicates(
         java=executables['java'],
         tmpdir=tmpdir,
         picard=executables['picard.jar'],
-        samtools=executables['samtools'],
+        samtools=executables['samtools-1.3.1'],
         merged=outputs[0].replace('.bam', '.dupes.bam'),
         cleaned=outputs[0].replace('.bam', '.cleaned.dupes.bam'),
         output=outputs[0]
@@ -198,8 +199,8 @@ def merge_and_mark_duplicates(
 def co_cleaning_pipeline(
         executables,
         reference,
-        known_sites,
-        known_indels,
+        dbsnp_known_sites,
+        hg38_known_indels,
         input_bam,
         output_dir,
         outputs=[],
@@ -251,8 +252,8 @@ def co_cleaning_pipeline(
         java=executables['java'],
         gatk3_jar=executables['GATK3-3.5_GenomeAnalysisTK.jar'],
         reference=reference,
-        known_sites=known_sites,
-        known_indels=known_indels,
+        known_sites=dbsnp_known_sites,
+        known_indels=hg38_known_indels,
         input_bam=input_bam,
         realigner_target_output="{}/realign_target.intervals".format(output_dir),
         indel_realigner_output="{}/indel_realigned.bam".format(output_dir),
@@ -269,7 +270,7 @@ def somaticsniper(
         reference,
         normal_bam,
         tumor_bam,
-        output,
+        outputs=[],
         label=None,
         stderr=parsl.AUTO_LOGNAME,
         stdout=parsl.AUTO_LOGNAME):
@@ -280,7 +281,7 @@ def somaticsniper(
         reference=reference,
         tumor=tumor_bam,
         normal=normal_bam,
-        output='{}/{}.vcf'.format(output, label)
+        output='{}/{}.vcf'.format(outputs[0], label)
     )
 
     return cmd
@@ -293,7 +294,7 @@ def muse(
         normal_bam,
         tumor_bam,
         known_sites,
-        output,
+        outputs=[],
         label=None,
         stderr=parsl.AUTO_LOGNAME,
         stdout=parsl.AUTO_LOGNAME):
@@ -307,8 +308,8 @@ def muse(
         tumor=tumor_bam,
         normal=normal_bam,
         known_sites=known_sites,
-        call_output='{}/{}'.format(output, label),
-        sump_output='{}/{}.vcf'.format(output, label)
+        call_output='{}/{}'.format(outputs[0], label),
+        sump_output='{}/{}.vcf'.format(outputs[0], label)
     )
 
     return cmd
@@ -321,7 +322,7 @@ def varscan(
         reference,
         normal_bam,
         tumor_bam,
-        output,
+        outputs=[],
         label=None,
         stderr=parsl.AUTO_LOGNAME,
         stdout=parsl.AUTO_LOGNAME):
@@ -360,11 +361,11 @@ def varscan(
         --max-normal-freq 0.05 \
         --p-value 0.07
     """.format(
-        samtools=executables['samtools'],
+        samtools=executables['samtools-1.1'],
         java=executables['java'],
         tmpdir=tmpdir,
         varscan=executables['varscan.jar'],
-        output=output,
+        output=outputs[0],
         reference=reference,
         tumor=tumor_bam,
         normal=normal_bam
@@ -380,9 +381,9 @@ def mutect2(
         reference,
         normal_bam,
         tumor_bam,
-        output,
         normal_panel,
         dbsnp,
+        outputs=[],
         label=None,
         stderr=parsl.AUTO_LOGNAME,
         stdout=parsl.AUTO_LOGNAME):
@@ -407,7 +408,7 @@ def mutect2(
         gatk4_jar=executables['GATK4-4.0.4.0_GenomeAnalysisTK.jar'],
         normal_panel=normal_panel,
         dbsnp=dbsnp,
-        output='{}/{}.vcf'.format(output, label),
+        output='{}/{}.vcf'.format(outputs[0], label),
         reference=reference,
         tumor=tumor_bam,
         normal=normal_bam
@@ -416,6 +417,11 @@ def mutect2(
     return cmd
 
 
+'''
+Strelka2 workflow uses PyFlow which is a parallel task engine. Therefore, carefully set the cpu parameter '-j' option
+Since optimal Parsl config has max_workers = 4; 
+it makes sense to have Strelka2 running with 4 vpus; 4 * 4 = 16 is < 24 (little less than cpus_per_node=24)
+'''
 @bash_app
 def strelka2_somatic(
         executables,
@@ -423,7 +429,7 @@ def strelka2_somatic(
         normal_bam,
         tumor_bam,
         analysis_output,
-        output,
+        outputs=[],
         label=None,
         stderr=parsl.AUTO_LOGNAME,
         stdout=parsl.AUTO_LOGNAME):
@@ -433,14 +439,14 @@ def strelka2_somatic(
     if [ ! -f $WORKFLOW_FILE ]; then
         {strelka2_somatic_configure} \
             --referenceFasta {reference} \
-            --callMemMb 2048 \
+            --callMemMb 4096 \
             --exome \
             --tumorBam {tumor} \
             --normalBam {normal} \
             --runDir {analysis_output}
     fi
 
-    {strelka2_analysis_run} -m local -j 1
+    {strelka2_analysis_run} -m local -j 4
     """.format(
         strelka2_somatic_configure=executables['strelka2_somatic_configure'],
         analysis_output=analysis_output,
@@ -459,7 +465,7 @@ def strelka2_germline(
         reference,
         bam_filepath,
         analysis_output,
-        output,
+        outputs=[],
         label=None,
         stderr=parsl.AUTO_LOGNAME,
         stdout=parsl.AUTO_LOGNAME):
@@ -469,19 +475,59 @@ def strelka2_germline(
     if [ ! -f $WORKFLOW_FILE ]; then
         {strelka2_germline_configure} \
             --referenceFasta {reference} \
-            --callMemMb 2048 \
+            --callMemMb 4096 \
             --exome \
             --bam {bam} \
             --runDir {analysis_output}
     fi
 
-    {strelka2_analysis_run} -m local -j 1
+    {strelka2_analysis_run} -m local -j 4
     """.format(
         strelka2_germline_configure=executables['strelka2_germline_configure'],
         analysis_output=analysis_output,
         strelka2_analysis_run='{}/runWorkflow.py'.format(analysis_output),
         reference=reference,
         bam=bam_filepath
+    )
+
+    return cmd
+
+
+'''
+GDC Annotations Workflow
+
+vep -i <input.vcf> --cache --offline --dir <cach_dir> --format vcf --symbol --output_file <output.vcf>
+--cache: GDC VEP cache File (https://gdc.cancer.gov/about-data/data-harmonization-and-generation/gdc-reference-files)
+--symbol: Adds the gene symbol (e.g. HGNC) (where available) to the output.
+
+'''
+@bash_app
+def annotatate_vep(
+        executables,
+        cach_dir,
+        input_vcf_gz,
+        vcf_filename,
+        output_dir,
+        outputs=[],
+        label=None,
+        stderr=parsl.AUTO_LOGNAME,
+        stdout=parsl.AUTO_LOGNAME):
+    cmd = """
+    set -e
+    tar {input_vcf_gz} -C {output_dir} && \
+
+    {vep} --cache --offline --format vcf --vcf --force_overwrite \
+        -i {input_vcf} \
+        --dir {cach_dir} \
+        --symbol \
+        --output_file {output_file}
+    """.format(
+        vep=executables['vep'],
+        input_vcf_gz=input_vcf_gz,
+        input_vcf=f"{os.path.join(output_dir, vcf_filename)}",
+        cach_dir=cach_dir,
+        output_dir=output_dir,
+        output_file=outputs[0]
     )
 
     return cmd

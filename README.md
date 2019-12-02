@@ -27,5 +27,7 @@ Run `scripts/gdc-btools.sh` to install dependencies
 
 `python run.py`
 
+`GDC_BAM_INPUT=/home/akila/Documents/NUS_CSI/Parsl/workspace/TCGA_OV_1.json GDC_CONFIG_FILE=/home/akila/Documents/NUS_CSI/Parsl/GDC-Pipeline/config/gdc_config_local.json python ./run.py`
+
 
 
